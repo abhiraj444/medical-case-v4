@@ -15,8 +15,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DiagnosisCard } from '@/components/DiagnosisCard';
 import { FileText, Loader2, Upload, PlusCircle, BrainCircuit, Lightbulb, Copy, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { db, storage } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { v4 as uuidv4 } from 'uuid';
+import { collection, serverTimestamp, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import type { StructuredQuestion } from '@/types';
 import { QuestionDisplay } from '@/components/QuestionDisplay';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -54,12 +56,27 @@ export default function AiDiagnosisPage() {
           if (caseSnap.exists() && caseSnap.data().userId === user.uid) {
             const caseData = caseSnap.data();
             setPatientData(caseData.inputData.patientData || '');
+            if (caseData.inputData.structuredQuestion) {
+              setStructuredQuestion({
+                ...caseData.inputData.structuredQuestion,
+                images: caseData.inputData.supportingDocuments || [],
+              });
+            } else {
+              setStructuredQuestion(null);
+            }
             setFilePreviews(caseData.inputData.supportingDocuments || []);
-            setFiles([]); // Can't restore File objects, but previews are shown
-            setStructuredQuestion(caseData.inputData.structuredQuestion || null);
-            // For diagnosis cases, outputData is always an object with 'diagnoses' and 'clinicalAnswer'
-            setResults(caseData.outputData.diagnoses || null);
-            setClinicalAnswer(caseData.outputData.clinicalAnswer || null);
+
+            if (caseData.outputDataUrl) {
+              const response = await fetch(caseData.outputDataUrl);
+              const outputData = await response.json();
+              setResults(outputData.diagnoses || null);
+              setClinicalAnswer(outputData.clinicalAnswer || null);
+            } else {
+              // Handle older data structure for backward compatibility
+              setResults(caseData.outputData?.diagnoses || null);
+              setClinicalAnswer(caseData.outputData?.clinicalAnswer || null);
+            }
+
             setCurrentCaseId(caseId);
             toast({ title: 'Case Loaded', description: `Successfully loaded case: ${caseData.title}` });
           } else {
@@ -138,7 +155,16 @@ export default function AiDiagnosisPage() {
     setClinicalAnswer(null);
     setStructuredQuestion(null);
     try {
+      const supportingDocumentUrls = await Promise.all(
+        files.map(async (file) => {
+          const storageRef = ref(storage, `uploads/${user.uid}/${uuidv4()}-${file.name}`);
+          await uploadBytes(storageRef, file);
+          return getDownloadURL(storageRef);
+        })
+      );
+
       const supportingDocuments = await Promise.all(files.map(fileToDataUri));
+
       const [diagnosisResults, summaryResponse, answerResponse] = await Promise.all([
         aiDiagnosis({
           patientData: patientData.trim() ? patientData : undefined,
@@ -155,9 +181,24 @@ export default function AiDiagnosisPage() {
       ]);
       setResults(diagnosisResults);
       setClinicalAnswer(answerResponse);
-      const newStructuredQuestion = { summary: summaryResponse.summary, images: supportingDocuments };
+      const newStructuredQuestion = { summary: summaryResponse.summary, images: supportingDocumentUrls };
       setStructuredQuestion(newStructuredQuestion);
       const title = diagnosisResults[0]?.diagnosis || answerResponse?.topic || 'New Diagnosis Case';
+      const outputData = {
+        diagnoses: diagnosisResults,
+        clinicalAnswer: answerResponse,
+      };
+
+      // Determine the case ID (new or existing)
+      const caseId = currentCaseId || doc(collection(db, 'cases')).id;
+
+      // Upload the output data to storage
+      const outputDataString = JSON.stringify(outputData);
+      const outputDataBlob = new Blob([outputDataString], { type: 'application/json' });
+      const storageRef = ref(storage, `outputs/${user.uid}/${caseId}.json`);
+      await uploadBytes(storageRef, outputDataBlob);
+      const outputDataUrl = await getDownloadURL(storageRef);
+
       const caseData = {
         userId: user.uid,
         type: 'diagnosis' as const,
@@ -165,21 +206,20 @@ export default function AiDiagnosisPage() {
         createdAt: serverTimestamp(),
         inputData: {
           patientData: patientData.trim() || null,
-          supportingDocuments: supportingDocuments,
+          supportingDocuments: supportingDocumentUrls,
           structuredQuestion: newStructuredQuestion,
         },
-        outputData: {
-          diagnoses: diagnosisResults,
-          clinicalAnswer: answerResponse,
-        },
+        outputDataUrl: outputDataUrl,
       };
+
       if (currentCaseId) {
         const caseRef = doc(db, 'cases', currentCaseId);
         await updateDoc(caseRef, caseData);
         toast({ title: 'Case Updated', description: 'Your case has been updated in your history.' });
       } else {
-        const docRef = await addDoc(collection(db, 'cases'), caseData);
-        setCurrentCaseId(docRef.id);
+        const caseRef = doc(db, 'cases', caseId);
+        await setDoc(caseRef, caseData);
+        setCurrentCaseId(caseId);
         toast({ title: 'Case Saved', description: 'Your diagnosis case has been saved to your history.' });
       }
     } catch (error) {

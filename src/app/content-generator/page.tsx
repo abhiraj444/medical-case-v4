@@ -16,8 +16,10 @@ import { Loader2, Wand2, Lightbulb, FileText, Bot, BrainCircuit, PlusCircle, Cop
 import { SlideEditor } from '@/components/SlideEditor';
 import type { Slide } from '@/components/SlideEditor';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { db, storage } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { v4 as uuidv4 } from 'uuid';
+import { collection, serverTimestamp, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import type { StructuredQuestion } from '@/types';
 import { QuestionDisplay } from '@/components/QuestionDisplay';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -66,11 +68,37 @@ export default function ContentGeneratorPage() {
             setMode(caseData.inputData.mode);
             setQuestion(caseData.inputData.question || '');
             setImageFiles([]);
+            if (caseData.inputData.structuredQuestion) {
+              setStructuredQuestion({
+                ...caseData.inputData.structuredQuestion,
+                images: caseData.inputData.images || [],
+              });
+            } else {
+              setStructuredQuestion(null);
+            }
             setImagePreviews(caseData.inputData.images || []);
-            setTopic(caseData.inputData.topic || '');
-            setStructuredQuestion(caseData.inputData.structuredQuestion || null);
-            setResult(caseData.outputData.result);
-            setSlides(caseData.outputData.slides);
+
+            if (caseData.outputDataUrl) {
+              try {
+                const response = await fetch(caseData.outputDataUrl);
+                if (!response.ok) {
+                  throw new Error(`Failed to fetch output data: ${response.statusText}`);
+                }
+                const outputData = await response.json();
+                setResult(outputData.result || null);
+                setSlides(outputData.slides || null);
+              } catch (e) {
+                console.error("Failed to parse output data from storage", e);
+                toast({ title: "Error", description: "Failed to load case results from storage.", variant: 'destructive' });
+                setResult(null);
+                setSlides(null);
+              }
+            } else {
+              // Handle older data structure for backward compatibility
+              setResult(caseData.outputData?.result);
+              setSlides(caseData.outputData?.slides);
+            }
+
             setCurrentCaseId(caseId);
             toast({ title: "Case Loaded", description: `Successfully loaded case: ${caseData.title}` });
           } else {
@@ -143,6 +171,14 @@ export default function ContentGeneratorPage() {
     setStructuredQuestion(null);
 
     try {
+      const imageUrls = await Promise.all(
+        imageFiles.map(async (file) => {
+          const storageRef = ref(storage, `uploads/${user.uid}/${uuidv4()}-${file.name}`);
+          await uploadBytes(storageRef, file);
+          return getDownloadURL(storageRef);
+        })
+      );
+
       const images = await Promise.all(imageFiles.map(fileToDataUri));
       
       const [response, summaryResponse] = await Promise.all([
@@ -157,8 +193,21 @@ export default function ContentGeneratorPage() {
       ]);
 
       setResult(response);
-      const newStructuredQuestion = { summary: summaryResponse.summary, images: images };
+      const newStructuredQuestion = { summary: summaryResponse.summary, images: imageUrls };
       setStructuredQuestion(newStructuredQuestion);
+
+      const outputData = {
+        result: response,
+        slides: null, // Slides are generated later
+      };
+
+      const caseId = currentCaseId || doc(collection(db, 'cases')).id;
+
+      const outputDataString = JSON.stringify(outputData);
+      const outputDataBlob = new Blob([outputDataString], { type: 'application/json' });
+      const storageRef = ref(storage, `outputs/${user.uid}/${caseId}.json`);
+      await uploadBytes(storageRef, outputDataBlob);
+      const outputDataUrl = await getDownloadURL(storageRef);
 
       const caseData = {
           userId: user.uid,
@@ -168,14 +217,11 @@ export default function ContentGeneratorPage() {
           inputData: {
               mode: 'question' as const,
               question: question.trim() || null,
-              images: images.length > 0 ? images : null,
+              images: imageUrls.length > 0 ? imageUrls : null,
               topic: null,
               structuredQuestion: newStructuredQuestion,
           },
-          outputData: {
-              result: response,
-              slides: null,
-          }
+          outputDataUrl: outputDataUrl,
       };
       
       if (currentCaseId) {
@@ -183,8 +229,9 @@ export default function ContentGeneratorPage() {
         await updateDoc(caseRef, caseData);
         toast({ title: 'Case Updated', description: 'Your case has been updated in your history.' });
       } else {
-        const docRef = await addDoc(collection(db, 'cases'), caseData);
-        setCurrentCaseId(docRef.id);
+        const caseRef = doc(db, 'cases', caseId);
+        await setDoc(caseRef, caseData);
+        setCurrentCaseId(caseId);
         toast({ title: 'Case Saved', description: 'Your content generation case has been saved to your history.' });
       }
 
@@ -219,6 +266,19 @@ export default function ContentGeneratorPage() {
       };
       setResult(summaryResult);
 
+      const outputData = {
+        result: summaryResult,
+        slides: null,
+      };
+
+      const caseId = currentCaseId || doc(collection(db, 'cases')).id;
+
+      const outputDataString = JSON.stringify(outputData);
+      const outputDataBlob = new Blob([outputDataString], { type: 'application/json' });
+      const storageRef = ref(storage, `outputs/${user.uid}/${caseId}.json`);
+      await uploadBytes(storageRef, outputDataBlob);
+      const outputDataUrl = await getDownloadURL(storageRef);
+
       const caseData = {
           userId: user.uid,
           type: 'content-generator' as const,
@@ -231,10 +291,7 @@ export default function ContentGeneratorPage() {
               topic: topic.trim() || null,
               structuredQuestion: null,
           },
-          outputData: {
-              result: summaryResult,
-              slides: null,
-          }
+          outputDataUrl: outputDataUrl,
       };
       
       if (currentCaseId) {
@@ -242,8 +299,9 @@ export default function ContentGeneratorPage() {
         await updateDoc(caseRef, caseData);
         toast({ title: 'Case Updated', description: 'Your case has been updated in your history.' });
       } else {
-        const docRef = await addDoc(collection(db, 'cases'), caseData);
-        setCurrentCaseId(docRef.id);
+        const caseRef = doc(db, 'cases', caseId);
+        await setDoc(caseRef, caseData);
+        setCurrentCaseId(caseId);
         toast({ title: 'Case Saved', description: 'Your content generation case has been saved to your history.' });
       }
 
@@ -279,8 +337,26 @@ export default function ContentGeneratorPage() {
       setSlides(generatedSlides);
 
       const caseRef = doc(db, 'cases', currentCaseId);
+      const caseSnap = await getDoc(caseRef);
+      if (!caseSnap.exists()) {
+        toast({ title: "Error", description: "Case not found.", variant: "destructive" });
+        return;
+      }
+
+      const caseData = caseSnap.data();
+      const response = await fetch(caseData.outputDataUrl);
+      const outputData = await response.json();
+
+      outputData.slides = generatedSlides;
+
+      const outputDataString = JSON.stringify(outputData);
+      const outputDataBlob = new Blob([outputDataString], { type: 'application/json' });
+      const storageRef = ref(storage, `outputs/${user.uid}/${currentCaseId}.json`);
+      await uploadBytes(storageRef, outputDataBlob);
+      const newOutputDataUrl = await getDownloadURL(storageRef);
+
       await updateDoc(caseRef, {
-        'outputData.slides': generatedSlides,
+        outputDataUrl: newOutputDataUrl,
       });
 
       toast({ title: 'Presentation Generated', description: 'Your presentation has been added to the case.' });
@@ -541,11 +617,31 @@ export default function ContentGeneratorPage() {
                 topic={result.topic}
                 caseId={currentCaseId}
                 onRefresh={handleGeneratePresentation}
-                onSlidesUpdate={(updatedSlides) => {
+                onSlidesUpdate={async (updatedSlides) => {
                     setSlides(updatedSlides);
-                    if (currentCaseId) {
-                        const caseRef = doc(db, 'cases', currentCaseId);
-                        updateDoc(caseRef, { 'outputData.slides': updatedSlides });
+                    if (currentCaseId && user) {
+                        try {
+                            const caseRef = doc(db, 'cases', currentCaseId);
+                            const caseSnap = await getDoc(caseRef);
+                            if (!caseSnap.exists()) return;
+
+                            const caseData = caseSnap.data();
+                            const response = await fetch(caseData.outputDataUrl);
+                            const outputData = await response.json();
+
+                            outputData.slides = updatedSlides;
+
+                            const outputDataString = JSON.stringify(outputData);
+                            const outputDataBlob = new Blob([outputDataString], { type: 'application/json' });
+                            const storageRef = ref(storage, `outputs/${user.uid}/${currentCaseId}.json`);
+                            await uploadBytes(storageRef, outputDataBlob);
+                            const newOutputDataUrl = await getDownloadURL(storageRef);
+
+                            await updateDoc(caseRef, { outputDataUrl: newOutputDataUrl });
+                        } catch (e) {
+                            console.error("Failed to update slides in storage", e);
+                            toast({ title: "Error", description: "Failed to save slide updates.", variant: 'destructive' });
+                        }
                     }
                 }}
                 onNewCase={handleNewCase}
