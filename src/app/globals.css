@@ -1,0 +1,179 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: Inter, sans-serif;
+  /* Ensure a smooth transition for theme changes if you're animating them */
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+@layer base {
+  :root { /* Light Mode Colors */
+    /* Core Palette */
+    --background: 220 10% 97%; /* Very Light Grey/Off-White */
+    --foreground: 210 15% 20%; /* Dark Grey/Near Black for text */
+    --card: 0 0% 100%; /* Clean White for cards */
+    --card-foreground: 210 15% 20%; /* Text for cards */
+    --popover: 0 0% 100%; /* Clean White for popovers */
+    --popover-foreground: 210 15% 20%; /* Text for popovers */
+
+    /* Primary Interactive/Accent Color */
+    --primary: 205 70% 50%; /* Professional Blue */
+    --primary-foreground: 0 0% 100%; /* White text on primary buttons */
+
+    /* Secondary Elements / Subtle Backgrounds */
+    --secondary: 210 10% 97%; /* Same as background for subtle elements */
+    --secondary-foreground: 210 15% 20%; /* Text on secondary elements */
+
+    /* Muted/Helper Text & Backgrounds */
+    --muted: 210 10% 90%; /* Light grey for muted backgrounds/elements */
+    --muted-foreground: 210 5% 40%; /* Medium Grey for subtle text */
+
+    /* Accent (Subtle highlight or active state) */
+    --accent: 205 70% 50%; /* Professional Blue (same as primary) */
+    --accent-foreground: 0 0% 100%; /* White for accent foreground (e.g., active tab text) */
+
+    /* Destructive Actions (Red) */
+    --destructive: 0 84.2% 60.2%; /* Red */
+    --destructive-foreground: 0 0% 98%; /* Near White */
+
+    /* Borders & Inputs */
+    --border: 210 10% 85%; /* Light Grey for borders */
+    --input: 210 10% 90%; /* Light grey for input backgrounds */
+    --ring: 205 70% 50%; /* Professional Blue (matching primary) */
+
+    /* Chart Colors (You can keep these or adjust based on new palette) */
+    --chart-1: 12 76% 61%; /* Orange-Red */
+    --chart-2: 173 58% 39%; /* Dark Teal */
+    --chart-3: 197 37% 24%; /* Desaturated Blue */
+    --chart-4: 43 74% 66%; /* Yellow */
+    --chart-5: 27 87% 67%; /* Orange */
+
+    /* Specific Content Section Colors */
+    --question: 220 10% 97%; /* Very Light Grey/Off-White (same as main background) */
+    --question-foreground: 210 15% 20%; /* Dark Grey/Near Black */
+
+    --answer: 220 10% 97%; /* Very Light Grey/Off-White (same as main background) */
+    --answer-foreground: 210 15% 20%; /* Dark Grey/Near Black */
+
+    --diagnosis: 220 10% 97%; /* Very Light Grey/Off-White (same as main background) */
+    --diagnosis-foreground: 210 15% 20%; /* Dark Grey/Near Black */
+
+    --reasoning: 38 70% 90%; /* Soft Muted Gold/Amber for Reasoning background */
+    --reasoning-foreground: 38 70% 45%; /* Darker Muted Gold/Amber for Reasoning text */
+
+    /* Sidebar Colors (assuming light sidebar in light mode) */
+    --sidebar-background: 0 0% 100%; /* White */
+    --sidebar-foreground: 210 15% 20%; /* Dark Grey/Near Black */
+    --sidebar-primary: 205 70% 50%; /* Professional Blue */
+    --sidebar-primary-foreground: 0 0% 100%; /* White */
+    --sidebar-accent: 205 70% 50%; /* Professional Blue */
+    --sidebar-accent-foreground: 0 0% 100%; /* White */
+    --sidebar-border: 210 10% 85%; /* Light Grey */
+    --sidebar-ring: 205 70% 50%; /* Professional Blue */
+
+    --radius: 0.5rem; /* Consistent border radius */
+  }
+
+  .dark { /* Dark Mode Colors */
+    color-scheme: dark;
+
+    /* Core Palette */
+    --background: 210 15% 12%; /* Deep Slate/Navy */
+    --foreground: 0 0% 95%; /* Light Grey/White for text */
+    --card: 210 12% 18%; /* Dark Grey/Blue for cards */
+    --card-foreground: 0 0% 95%; /* Light Grey/White */
+    --popover: 210 12% 18%; /* Dark Grey/Blue for popovers */
+    --popover-foreground: 0 0% 95%; /* Light Grey/White */
+
+    /* Primary Interactive/Accent Color */
+    --primary: 205 70% 50%; /* Professional Blue */
+    --primary-foreground: 210 15% 12%; /* Deep Slate/Navy (dark text on primary buttons) */
+
+    /* Secondary Elements / Subtle Backgrounds */
+    --secondary: 210 15% 15%; /* Slightly lighter than background for subtle elements */
+    --secondary-foreground: 0 0% 95%; /* Light Grey/White */
+
+    /* Muted/Helper Text & Backgrounds */
+    --muted: 210 10% 25%; /* Darker grey for muted backgrounds/elements */
+    --muted-foreground: 134 15.5% 63.1%; /* Medium Grey for subtle text */
+
+    /* Accent (Subtle highlight or active state) */
+    --accent: 170 50% 40%; /* Softer Teal/Green */
+    --accent-foreground: 0 0% 98%; /* Near White */
+
+    /* Destructive Actions (Red) */
+    --destructive: 0 62.8% 30.6%; /* Dark Red */
+    --destructive-foreground: 0 0% 98%; /* Near White */
+
+    /* Borders & Inputs */
+    --border: 210 8% 25%; /* Subtle Grey for borders */
+    --input: 210 10% 20%; /* Dark grey for input backgrounds */
+    --ring: 205 70% 50%; /* Professional Blue (matching primary) */
+
+    /* Chart Colors (You can keep these or adjust based on new palette) */
+    --chart-1: 220 70% 50%; /* Blue */
+    --chart-2: 160 60% 45%; /* Green */
+    --chart-3: 340 75% 25%; /* Darker Baby Pink (replacing previous orange chart-3) */
+    --chart-4: 280 65% 60%; /* Purple */
+    --chart-5: 340 75% 55%; /* Pink (lighter shade of pink) */
+
+    /* Specific Content Section Colors */
+    --question: 210 15% 12%; /* Deep Slate/Navy (same as main background) */
+    --question-foreground: 0 0% 95%; /* Light Grey/White */
+
+    --answer: 210 15% 12%; /* Deep Slate/Navy (same as main background) */
+    --answer-foreground: 0 0% 95%; /* Light Grey/White */
+
+    --diagnosis: 210 15% 12%; /* Deep Slate/Navy (same as main background) */
+    --diagnosis-foreground: 0 0% 95%; /* Light Grey/White */
+
+    /* --- BABY PINK COLORS FOR DARK MODE --- */
+    --reasoning: 0 21.8% 15%; /* Darker Baby Pink background for Reasoning/Info boxes */
+    --reasoning-foreground: 141 52.1% 76.5%; /* Brighter Baby Pink for text on Reasoning/Info boxes */
+
+    /* Sidebar Colors (assuming dark sidebar in dark mode) */
+    --sidebar-background: 210 12% 18%; /* Dark Grey/Blue */
+    --sidebar-foreground: 0 0% 95%; /* Light Grey/White */
+    --sidebar-primary: 205 70% 50%; /* Professional Blue */
+    --sidebar-primary-foreground: 210 15% 12%; /* Deep Slate/Navy */
+    --sidebar-accent: 170 50% 40%; /* Softer Teal/Green */
+    --sidebar-accent-foreground: 0 0% 98%; /* Near White */
+    --sidebar-border: 210 8% 25%; /* Subtle Grey */
+    --sidebar-ring: 205 70% 50%; /* Professional Blue */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* --- RULE FOR REASONING HEADINGS FIX (UNCHANGED) --- */
+  /* This targets any strong/bold text or headings within elements
+     that are using the --reasoning background */
+  .dark [class*="reasoning"] h1,
+  .dark [class*="reasoning"] h2,
+  .dark [class*="reasoning"] h3,
+  .dark [class*="reasoning"] h4,
+  .dark [class*="reasoning"] h5,
+  .dark [class*="reasoning"] h6,
+  .dark [class*="reasoning"] strong,
+  .dark [class*="reasoning"] b,
+  .dark [class*="reasoning"] .font-semibold, /* If you're using Tailwind's font weight utilities */
+  .dark [class*="reasoning"] .font-bold /* If you're using Tailwind's font weight utilities */
+  {
+    color: hsl(var(--reasoning-foreground)) !important; /* Force the bright foreground color */
+  }
+  /* --- RULE FOR REASONING ICON FIX (UNCHANGED) --- */
+  /* This targets common icon elements within reasoning containers */
+  .dark [class*="reasoning"] svg,
+  .dark [class*="reasoning"] [data-icon] {
+    fill: hsl(var(--reasoning-foreground)) !important; /* For SVG icons */
+    color: hsl(var(--reasoning-foreground)) !important; /* For font icons */
+  }
+}
