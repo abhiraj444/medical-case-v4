@@ -1,6 +1,6 @@
 [
   {
-    "origin": ["http://localhost:3000", "medical-case-v2-7wtizsppu-abhiraj444s-projects.vercel.app", "medical-case-v2.vercel.app"],
+    "origin": ["http://localhost:3000", "https://medical-case-v2-7wtizsppu-abhiraj444s-projects.vercel.app", "https://medical-case-v2.vercel.app"],
     "method": ["GET"],
     "responseHeader": ["Content-Type"],
     "maxAgeSeconds": 3600
