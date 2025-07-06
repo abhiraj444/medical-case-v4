@@ -5,7 +5,8 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { registerNotoSansRegular } from '@/lib/pdf-fonts/NotoSansRegular';
 import { registerNotoSansBold } from '@/lib/pdf-fonts/NotoSansBold';
-import { registerNotoSansItalic } from '@/lib/pdf-fonts/NotoSansItalic'; // Corrected path if needed, assuming it's in pdf/fonts
+// Fixed import path for NotoSansItalic
+import { registerNotoSansItalic } from '@/lib/pdf-fonts/NotoSansItalic';
 import {
   Document,
   Packer,
@@ -308,42 +309,94 @@ export function SlideEditor({
         };
 
         /**
-         * Renders a text block (paragraph or list item) with optional bolding and wrapping.
-         * If 'boldParts' array is provided and contains text, the entire block is bolded.
+         * Renders a text block (paragraph or list item) with mixed bold and normal text.
+         * This function now pre-processes the text into styled segments and then
+         * constructs lines, ensuring proper wrapping and mixed styling.
          * @param {jsPDF} doc - The jsPDF document instance.
-         * @param {string} text - The text content to render.
-         * @param {string[]} boldParts - An array of strings that should be bolded (if found in text).
+         * @param {string} text - The full text content to render.
+         * @param {string[]} boldParts - An array of strings within the text that should be bolded.
          * @param {number} x - The X coordinate to start drawing the text.
          * @param {number} y - The Y coordinate to start drawing the text.
          * @param {number} maxWidth - The maximum width for text wrapping.
          * @param {number} fontSize - The font size for the text.
          * @param {string} textColor - The color of the text (e.g., '#RRGGBB').
-         * @returns {number} The height consumed by the rendered text.
+         * @returns {number} The height consumed by the rendered text block.
          */
         const renderTextBlock = (doc: jsPDF, text: string, boldParts: string[] | undefined, x: number, y: number, maxWidth: number, fontSize: number, textColor: string): number => {
             doc.setFontSize(fontSize);
             doc.setTextColor(textColor);
-            // Determine if the entire block should be bolded based on `boldParts`
-            const shouldBeBold = boldParts && boldParts.length > 0 && boldParts.some(bp => text.includes(bp));
-            doc.setFont(doc.getFont().fontName, shouldBeBold ? 'bold' : 'normal');
+            const lineHeight = fontSize * 0.4; // Estimate line height
 
-            // Split text into lines that fit within maxWidth
-            const lines = doc.splitTextToSize(text, maxWidth);
-            const lineHeight = fontSize * 0.4; // Estimate line height (adjust as needed)
+            // Step 1: Split the original text into styled segments
+            const segments: { text: string; isBold: boolean }[] = [];
+            const escapedBoldParts = (boldParts || []).map(bp => bp.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+            const regex = new RegExp(`(${escapedBoldParts.join('|')})`, 'g');
+            const parts = text.split(regex);
+
+            parts.forEach(part => {
+                if (part) { // Filter out empty strings from split
+                    const isBold = escapedBoldParts.includes(part);
+                    segments.push({ text: part, isBold });
+                }
+            });
+
+            // Step 2: Build lines from segments, handling wrapping
+            const lines: { text: string; isBold: boolean }[][] = [];
+            let currentLineSegments: { text: string; isBold: boolean }[] = [];
+            let currentLineText = '';
+
+            for (const segment of segments) {
+                const words = segment.text.split(/(\s+)/); // Split by spaces, keeping spaces as separate elements
+
+                for (const word of words) {
+                    if (!word) continue; // Skip empty strings from split
+
+                    // Temporarily set font to measure width correctly
+                    doc.setFont('NotoSans', segment.isBold ? 'bold' : 'normal');
+                    const wordWidth = doc.getTextWidth(word);
+
+                    if (doc.getTextWidth(currentLineText + word) > maxWidth && currentLineText !== '') {
+                        // Current word doesn't fit, so finalize the current line
+                        lines.push(currentLineSegments);
+                        currentLineSegments = [];
+                        currentLineText = '';
+                    }
+
+                    // Add the word to the current line
+                    currentLineSegments.push({ text: word, isBold: segment.isBold });
+                    currentLineText += word;
+                }
+            }
+            if (currentLineSegments.length > 0) {
+                lines.push(currentLineSegments); // Add any remaining segments as the last line
+            }
+
+            const estimatedHeight = lines.length * lineHeight;
 
             // Check for page overflow before drawing
-            const estimatedHeight = lines.length * lineHeight;
             if (currentY + estimatedHeight > pageHeight - margin) {
                 addNewPage();
             }
 
-            // Draw each line
-            doc.text(lines, x, currentY);
-            currentY += estimatedHeight; // Advance Y position by the height of the text block
+            const startYForBlock = currentY; // Store Y position for current block
 
-            doc.setFont(doc.getFont().fontName, 'normal'); // Reset font style to normal
+            // Step 3: Draw each segment on its line
+            for (let i = 0; i < lines.length; i++) {
+                const lineSegments = lines[i];
+                let currentX = x;
+                const lineY = startYForBlock + (i * lineHeight);
+
+                for (const segment of lineSegments) {
+                    doc.setFont('NotoSans', segment.isBold ? 'bold' : 'normal');
+                    doc.text(segment.text, currentX, lineY);
+                    currentX += doc.getTextWidth(segment.text);
+                }
+            }
+
+            currentY += estimatedHeight; // Advance Y position by the height of the text block
             return estimatedHeight; // Return the height consumed
         };
+
 
         /**
          * Renders a table block, handling headers, rows, and page breaks.
@@ -364,7 +417,7 @@ export function SlideEditor({
 
             // Function to draw table headers (can be called on new pages)
             const drawTableHeaders = () => {
-                doc.setFont(doc.getFont().fontName, 'bold');
+                doc.setFont('NotoSans', 'bold'); // Use NotoSans for headers
                 let headerX = x;
                 let maxHeaderHeight = tableLineHeight + 2 * cellPadding; // Minimum header height
 
@@ -376,14 +429,14 @@ export function SlideEditor({
 
                 // Draw header cells
                 headers.forEach(headerText => {
-                    doc.setFillColor(headerBgColor[0], headerBgColor[1], headerBgColor[2]); // Fixed: Pass as individual arguments
+                    doc.setFillColor(headerBgColor[0], headerBgColor[1], headerBgColor[2]);
                     doc.rect(headerX, currentY, colWidth, maxHeaderHeight, 'F'); // Draw filled rectangle
                     doc.setTextColor(headerTextColor); // Set header text color
                     const lines = doc.splitTextToSize(headerText, colWidth - 2 * cellPadding);
                     doc.text(lines, headerX + cellPadding, currentY + cellPadding + (maxHeaderHeight - lines.length * tableLineHeight) / 2);
                     headerX += colWidth;
                 });
-                doc.setFont(doc.getFont().fontName, 'normal'); // Reset font style
+                doc.setFont('NotoSans', 'normal'); // Reset font style
                 doc.setTextColor(paragraphColor); // Reset text color for general content
                 currentY += maxHeaderHeight; // Advance Y position after headers
             };
@@ -414,10 +467,11 @@ export function SlideEditor({
                 const fillColor = rowIndex % 2 === 0 ? rowEvenColor : rowOddColor;
 
                 row.cells.forEach(cellText => {
-                    doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]); // Fixed: Pass as individual arguments
+                    doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
                     doc.rect(cellX, currentY, colWidth, rowHeight, 'F'); // Draw filled rectangle for cell background
                     doc.rect(cellX, currentY, colWidth, rowHeight, 'S'); // Draw cell border
                     doc.setTextColor(listItemColor); // Set text color for cell content
+                    doc.setFont('NotoSans', 'normal'); // Set font for cell content
                     const lines = doc.splitTextToSize(cellText, colWidth - 2 * cellPadding);
                     // Vertically center text in cell
                     doc.text(lines, cellX + cellPadding, currentY + cellPadding + (rowHeight - lines.length * tableLineHeight) / 2);
@@ -436,7 +490,7 @@ export function SlideEditor({
 
             // Render slide title
             doc.setFontSize(18);
-            doc.setFont(doc.getFont().fontName, 'bold');
+            doc.setFont('NotoSans', 'bold'); // Use NotoSans for titles
             doc.setTextColor(titleColor); // Set title color
             const titleLines = doc.splitTextToSize(slide.title, contentWidth);
             const titleHeight = titleLines.length * 18 * 0.4; // Estimate title height
@@ -447,7 +501,7 @@ export function SlideEditor({
             }
             doc.text(titleLines, margin, currentY);
             currentY += titleHeight + 15; // Add space after title
-            doc.setFont(doc.getFont().fontName, 'normal'); // Reset font style
+            doc.setFont('NotoSans', 'normal'); // Reset font style
 
             // Iterate through content blocks within the slide
             slide.content.forEach(block => {
@@ -459,24 +513,20 @@ export function SlideEditor({
                     const itemSpacing = 3; // Spacing between list items
                     doc.setFontSize(11);
 
-                    // Render each list item
                     block.items.forEach((item, index) => {
                         const prefix = block.type === 'bullet_list' ? '• ' : `${index + 1}. `;
-                        const itemText = prefix + item.text; // Combine prefix and text for rendering
-                        const boldParts = item.bold || []; // Ensure boldParts is an array
+                        const itemText = prefix + item.text;
+                        const boldParts = item.bold || [];
 
-                        // Render the list item using renderTextBlock
-                        // Adjust X and maxWidth for indentation
+                        // Pass the prefix as part of the text and let renderTextBlock handle it
                         const itemHeight = renderTextBlock(doc, itemText, boldParts, margin + listItemIndent, currentY, contentWidth - listItemIndent, 11, listItemColor);
-                        currentY += itemSpacing; // Add spacing after each item
+                        currentY += itemSpacing;
                     });
-                    currentY += 10; // Add spacing after the entire list
+                    currentY += 10;
                 } else if (block.type === 'table') {
                     renderTable(doc, block.headers, block.rows, margin, currentY, contentWidth, 10);
-                    currentY += 10; // Add spacing after table
+                    currentY += 10;
                 }
-                // Note: Special characters like α, β, ≥ might not render correctly with default jsPDF fonts.
-                // For full Unicode support, you would need to embed a custom font.
             });
         });
 
