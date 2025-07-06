@@ -1,9 +1,11 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { registerNotoSansRegular } from '@/lib/pdf-fonts/NotoSansRegular';
+import { registerNotoSansBold } from '@/lib/pdf-fonts/NotoSansBold';
+import { registerNotoSansItalic } from '@/lib/pdf-fonts/NotoSansItalic'; // Corrected path if needed, assuming it's in pdf/fonts
 import {
   Document,
   Packer,
@@ -100,7 +102,7 @@ const renderContentItem = (item: ContentItem, index: number) => {
       default: return null;
     }
   };
-  
+
   const isParagraph = (content: ContentItem): content is ParagraphContent => content.type === 'paragraph';
 
   return (
@@ -250,7 +252,7 @@ export function SlideEditor({
       setIsModifying(false);
     }
   };
-  
+
   const handleCopyRawContent = () => {
     const rawContent = JSON.stringify({slides}, null, 2);
     navigator.clipboard.writeText(rawContent).then(
@@ -271,198 +273,213 @@ export function SlideEditor({
       }
     );
   };
-  
+
   const handleExportToPdf = () => {
     setIsModifying(true);
     try {
-        const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-        
-        let pageWidth = doc.internal.pageSize.getWidth();
-        let pageHeight = doc.internal.pageSize.getHeight();
-        doc.deletePage(1); // Start with a fresh slate, no initial blank page.
-        
-        const margin = 50;
-        const lineHeight = 16;
-        const titleSize = 18;
-        const bodySize = 11;
+        // Initialize jsPDF document
+        const doc = new jsPDF();
+        // Register your custom fonts with jsPDF
+        registerNotoSansRegular(doc);
+        registerNotoSansBold(doc);
+        registerNotoSansItalic(doc);
+        // Set the default font for the document to 'NotoSans'
+        // This name 'NotoSans' must match the name used in registerNotoSansX functions
+        doc.setFont('NotoSans');
+        const margin = 20; // Page margin in mm
+        let currentY = margin; // Current Y position on the page
+        const pageHeight = doc.internal.pageSize.height; // Total page height
+        const pageWidth = doc.internal.pageSize.width; // Total page width
+        const contentWidth = pageWidth - 2 * margin; // Usable content width
 
-        let y = 0; // The cursor
+        // Define colors - Explicitly define as tuples
+        const titleColor = '#4A90E2'; // Blue
+        const paragraphColor = '#333333'; // Dark Gray
+        const listItemColor = '#333333'; // Dark Gray
+        const headerBgColor: [number, number, number] = [220, 230, 240]; // Light blue-gray for table headers (RGB)
+        const headerTextColor = '#2C3E50'; // Dark blue-gray for table headers (Hex, will be converted by jsPDF)
+        const rowEvenColor: [number, number, number] = [255, 255, 255]; // White for even rows (RGB)
+        const rowOddColor: [number, number, number] = [245, 245, 245]; // Very light gray for odd rows (RGB)
 
-        const drawHeader = (title: string) => {
-          doc.setFontSize(titleSize);
-          doc.setFont('helvetica', 'bold');
-          doc.text(title, margin, y);
-          doc.setFont('helvetica', 'normal');
-          y += titleSize + 10;
-        };
-        
-        const ensureSpace = (neededHeight: number, currentTitle: string) => {
-            if (y + neededHeight > pageHeight - margin) {
-                doc.addPage();
-                y = margin;
-                pageWidth = doc.internal.pageSize.getWidth();
-                pageHeight = doc.internal.pageSize.getHeight();
-                drawHeader(currentTitle);
-            }
-        };
-
-        const drawFormattedText = (text: string, bold: string[] | undefined, x: number, startY: number, maxWidth: number): number => {
-            if (!text) return startY;
-        
-            const parts = (() => {
-                if (!bold || bold.length === 0) {
-                    return [{ text: text, isBold: false }];
-                }
-                const boldEscaped = bold.map(b => b.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
-                const regex = new RegExp(`(${boldEscaped.join('|')})`, 'g');
-                return text.split(regex).filter(Boolean).map(part => ({
-                    text: part,
-                    isBold: bold.includes(part),
-                }));
-            })();
-            
-            let currentX = x;
-            let currentY = startY;
-        
-            parts.forEach(part => {
-                doc.setFont('helvetica', part.isBold ? 'bold' : 'normal');
-                
-                const words = part.text.split(/(\s+)/);
-        
-                words.forEach(word => {
-                    if (!word) return;
-                    const wordWidth = doc.getTextWidth(word);
-                    if (currentX + wordWidth > x + maxWidth) {
-                        currentX = x;
-                        currentY += lineHeight;
-                    }
-                    doc.text(word, currentX, currentY);
-                    currentX += wordWidth;
-                });
-            });
-            
-            return currentY;
-        };
-
-        const calculateFormattedTextHeight = (text: string, bold: string[] | undefined, maxWidth: number): number => {
-            if (!text) return 0;
-        
-            const parts = (() => {
-                if (!bold || bold.length === 0) {
-                    return [{ text: text, isBold: false }];
-                }
-                const boldEscaped = bold.map(b => b.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
-                const regex = new RegExp(`(${boldEscaped.join('|')})`, 'g');
-                return text.split(regex).filter(Boolean).map(part => ({
-                    text: part,
-                    isBold: bold.includes(part),
-                }));
-            })();
-            
-            let lineCount = 1;
-            let currentX = 0;
-        
-            parts.forEach(part => {
-                doc.setFont('helvetica', part.isBold ? 'bold' : 'normal');
-                
-                const words = part.text.split(/(\s+)/);
-        
-                words.forEach(word => {
-                    if (!word) return;
-                    const wordWidth = doc.getTextWidth(word);
-                    if (currentX + wordWidth > maxWidth) {
-                        lineCount++;
-                        currentX = wordWidth;
-                    } else {
-                        currentX += wordWidth;
-                    }
-                });
-            });
-            
-            return lineCount * lineHeight;
-        };
-
-
-        slides.forEach((slide) => {
+        // Function to add a new page and reset Y position to the top margin
+        const addNewPage = () => {
             doc.addPage();
-            y = margin;
+            currentY = margin;
+        };
 
-            drawHeader(slide.title);
+        /**
+         * Renders a text block (paragraph or list item) with optional bolding and wrapping.
+         * If 'boldParts' array is provided and contains text, the entire block is bolded.
+         * @param {jsPDF} doc - The jsPDF document instance.
+         * @param {string} text - The text content to render.
+         * @param {string[]} boldParts - An array of strings that should be bolded (if found in text).
+         * @param {number} x - The X coordinate to start drawing the text.
+         * @param {number} y - The Y coordinate to start drawing the text.
+         * @param {number} maxWidth - The maximum width for text wrapping.
+         * @param {number} fontSize - The font size for the text.
+         * @param {string} textColor - The color of the text (e.g., '#RRGGBB').
+         * @returns {number} The height consumed by the rendered text.
+         */
+        const renderTextBlock = (doc: jsPDF, text: string, boldParts: string[] | undefined, x: number, y: number, maxWidth: number, fontSize: number, textColor: string): number => {
+            doc.setFontSize(fontSize);
+            doc.setTextColor(textColor);
+            // Determine if the entire block should be bolded based on `boldParts`
+            const shouldBeBold = boldParts && boldParts.length > 0 && boldParts.some(bp => text.includes(bp));
+            doc.setFont(doc.getFont().fontName, shouldBeBold ? 'bold' : 'normal');
 
-            slide.content.forEach(item => {
-                doc.setFontSize(bodySize);
-                
-                switch (item.type) {
-                    case 'paragraph': {
-                        const needed = calculateFormattedTextHeight(item.text, item.bold, pageWidth - margin * 2);
-                        ensureSpace(needed, slide.title);
-                        const finalY = drawFormattedText(item.text, item.bold, margin, y, pageWidth - margin * 2);
-                        y = finalY + lineHeight;
-                        y += 10;
-                        break;
-                    }
+            // Split text into lines that fit within maxWidth
+            const lines = doc.splitTextToSize(text, maxWidth);
+            const lineHeight = fontSize * 0.4; // Estimate line height (adjust as needed)
 
-                    case 'note': {
-                        const text = `Note: ${item.text.replace(/^Note:\s*/i, '')}`;
-                        const lines = doc.splitTextToSize(text, pageWidth - margin * 2);
-                        const needed = lines.length * lineHeight;
-                        ensureSpace(needed, slide.title);
-                        
-                        doc.setFont('helvetica', 'italic');
-                        doc.text(lines, margin, y);
-                        y += needed;
-                        doc.setFont('helvetica', 'normal');
+            // Check for page overflow before drawing
+            const estimatedHeight = lines.length * lineHeight;
+            if (currentY + estimatedHeight > pageHeight - margin) {
+                addNewPage();
+            }
 
-                        y += 10;
-                        break;
-                    }
+            // Draw each line
+            doc.text(lines, x, currentY);
+            currentY += estimatedHeight; // Advance Y position by the height of the text block
 
-                    case 'bullet_list':
-                    case 'numbered_list': {
-                        item.items.forEach((listItem, index) => {
-                            const prefix = item.type === 'bullet_list' ? '•  ' : `${index + 1}.  `;
-                            const prefixWidth = doc.getTextWidth(prefix);
-                            const textMaxWidth = pageWidth - (margin + prefixWidth) - margin;
+            doc.setFont(doc.getFont().fontName, 'normal'); // Reset font style to normal
+            return estimatedHeight; // Return the height consumed
+        };
 
-                            const needed = calculateFormattedTextHeight(listItem.text, listItem.bold, textMaxWidth);
-                            ensureSpace(needed + 4, slide.title);
+        /**
+         * Renders a table block, handling headers, rows, and page breaks.
+         * @param {jsPDF} doc - The jsPDF document instance.
+         * @param {string[]} headers - Array of table headers.
+         * @param {object[]} rows - Array of table rows, each with a 'cells' array.
+         * @param {number} x - The X coordinate for the table.
+         * @param {number} y - The Y coordinate for the table.
+         * @param {number} maxWidth - The maximum width for the table.
+         * @param {number} fontSize - The font size for table content.
+         */
+        const renderTable = (doc: jsPDF, headers: string[], rows: { cells: string[] }[], x: number, y: number, maxWidth: number, fontSize: number) => {
+            doc.setFontSize(fontSize);
+            const tableLineHeight = fontSize * 0.4; // Line height for table cells
+            const cellPadding = 2; // Padding inside cells
+            const numColumns = headers.length;
+            const colWidth = maxWidth / numColumns; // Distribute width equally among columns
 
-                            doc.setFont('helvetica', 'normal');
-                            doc.text(prefix, margin, y);
+            // Function to draw table headers (can be called on new pages)
+            const drawTableHeaders = () => {
+                doc.setFont(doc.getFont().fontName, 'bold');
+                let headerX = x;
+                let maxHeaderHeight = tableLineHeight + 2 * cellPadding; // Minimum header height
 
-                            const finalY = drawFormattedText(listItem.text, listItem.bold, margin + prefixWidth, y, textMaxWidth);
-                            y = finalY + lineHeight + 4;
-                        });
-                        y += 10;
-                        break;
-                    }
+                // Calculate max header height considering wrapping
+                headers.forEach(headerText => {
+                    const lines = doc.splitTextToSize(headerText, colWidth - 2 * cellPadding);
+                    maxHeaderHeight = Math.max(maxHeaderHeight, lines.length * tableLineHeight + 2 * cellPadding);
+                });
 
-                    case 'table': {
-                        const head = [item.headers];
-                        const body = item.rows.map(row => row.cells);
-                        
-                        autoTable(doc, {
-                            head,
-                            body,
-                            startY: y,
-                            theme: 'grid',
-                            styles: { fontSize: 10, cellPadding: 4 },
-                            headStyles: { fontStyle: 'bold' },
-                            didDrawPage: (data) => {
-                                y = margin;
-                                drawHeader(slide.title);
-                                if (data.cursor) {
-                                    data.cursor.y = y;
-                                }
-                            }
-                        });
-                        y = (doc as any).lastAutoTable.finalY + 20;
-                        break;
-                    }
+                // Draw header cells
+                headers.forEach(headerText => {
+                    doc.setFillColor(headerBgColor[0], headerBgColor[1], headerBgColor[2]); // Fixed: Pass as individual arguments
+                    doc.rect(headerX, currentY, colWidth, maxHeaderHeight, 'F'); // Draw filled rectangle
+                    doc.setTextColor(headerTextColor); // Set header text color
+                    const lines = doc.splitTextToSize(headerText, colWidth - 2 * cellPadding);
+                    doc.text(lines, headerX + cellPadding, currentY + cellPadding + (maxHeaderHeight - lines.length * tableLineHeight) / 2);
+                    headerX += colWidth;
+                });
+                doc.setFont(doc.getFont().fontName, 'normal'); // Reset font style
+                doc.setTextColor(paragraphColor); // Reset text color for general content
+                currentY += maxHeaderHeight; // Advance Y position after headers
+            };
+
+            // Check if headers fit on the current page
+            if (currentY + (tableLineHeight + 2 * cellPadding) > pageHeight - margin) {
+                addNewPage();
+            }
+            drawTableHeaders(); // Draw initial headers
+
+            // Draw table rows
+            rows.forEach((row, rowIndex) => {
+                let rowHeight = tableLineHeight + 2 * cellPadding; // Minimum row height
+
+                // Pre-calculate row height based on content in all cells
+                row.cells.forEach(cellText => {
+                    const lines = doc.splitTextToSize(cellText, colWidth - 2 * cellPadding);
+                    rowHeight = Math.max(rowHeight, lines.length * tableLineHeight + 2 * cellPadding);
+                });
+
+                // Check if the current row fits on the page
+                if (currentY + rowHeight > pageHeight - margin) {
+                    addNewPage();
+                    drawTableHeaders(); // Redraw headers on new page
                 }
+
+                let cellX = x;
+                const fillColor = rowIndex % 2 === 0 ? rowEvenColor : rowOddColor;
+
+                row.cells.forEach(cellText => {
+                    doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]); // Fixed: Pass as individual arguments
+                    doc.rect(cellX, currentY, colWidth, rowHeight, 'F'); // Draw filled rectangle for cell background
+                    doc.rect(cellX, currentY, colWidth, rowHeight, 'S'); // Draw cell border
+                    doc.setTextColor(listItemColor); // Set text color for cell content
+                    const lines = doc.splitTextToSize(cellText, colWidth - 2 * cellPadding);
+                    // Vertically center text in cell
+                    doc.text(lines, cellX + cellPadding, currentY + cellPadding + (rowHeight - lines.length * tableLineHeight) / 2);
+                    cellX += colWidth;
+                });
+                currentY += rowHeight; // Advance Y position after the row
+            });
+        };
+
+        // Iterate through each slide in the JSON data
+        slides.forEach((slide, slideIndex) => {
+            // Add a new page for each slide, except the first one
+            if (slideIndex > 0) {
+                addNewPage();
+            }
+
+            // Render slide title
+            doc.setFontSize(18);
+            doc.setFont(doc.getFont().fontName, 'bold');
+            doc.setTextColor(titleColor); // Set title color
+            const titleLines = doc.splitTextToSize(slide.title, contentWidth);
+            const titleHeight = titleLines.length * 18 * 0.4; // Estimate title height
+
+            // Check for page overflow for the title
+            if (currentY + titleHeight > pageHeight - margin) {
+                addNewPage();
+            }
+            doc.text(titleLines, margin, currentY);
+            currentY += titleHeight + 15; // Add space after title
+            doc.setFont(doc.getFont().fontName, 'normal'); // Reset font style
+
+            // Iterate through content blocks within the slide
+            slide.content.forEach(block => {
+                if (block.type === 'paragraph') {
+                    renderTextBlock(doc, block.text, block.bold, margin, currentY, contentWidth, 12, paragraphColor);
+                    currentY += 10; // Add spacing after paragraph
+                } else if (block.type === 'bullet_list' || block.type === 'numbered_list') {
+                    const listItemIndent = 10; // Indentation for list items
+                    const itemSpacing = 3; // Spacing between list items
+                    doc.setFontSize(11);
+
+                    // Render each list item
+                    block.items.forEach((item, index) => {
+                        const prefix = block.type === 'bullet_list' ? '• ' : `${index + 1}. `;
+                        const itemText = prefix + item.text; // Combine prefix and text for rendering
+                        const boldParts = item.bold || []; // Ensure boldParts is an array
+
+                        // Render the list item using renderTextBlock
+                        // Adjust X and maxWidth for indentation
+                        const itemHeight = renderTextBlock(doc, itemText, boldParts, margin + listItemIndent, currentY, contentWidth - listItemIndent, 11, listItemColor);
+                        currentY += itemSpacing; // Add spacing after each item
+                    });
+                    currentY += 10; // Add spacing after the entire list
+                } else if (block.type === 'table') {
+                    renderTable(doc, block.headers, block.rows, margin, currentY, contentWidth, 10);
+                    currentY += 10; // Add spacing after table
+                }
+                // Note: Special characters like α, β, ≥ might not render correctly with default jsPDF fonts.
+                // For full Unicode support, you would need to embed a custom font.
             });
         });
-        
+
         const docName = `${topic.replace(/\s+/g, '_') || 'document'}.pdf`;
         doc.save(docName);
         toast({
@@ -481,13 +498,13 @@ export function SlideEditor({
 
   const handleExportToWord = async () => {
     setIsModifying(true);
-    
+
     const createTextRuns = (text: string, bold?: string[]): TextRun[] => {
       if (!text) return [new TextRun({ text: '' })];
       if (!bold || bold.length === 0) {
           return [new TextRun({ text })];
       }
-      
+
       const boldEscaped = bold.map(b => b.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
       const regex = new RegExp(`(${boldEscaped.join('|')})`, 'g');
       const parts = text.split(regex).filter(Boolean);
@@ -588,7 +605,6 @@ export function SlideEditor({
               contentRuns.forEach(run => {
                 noteRuns.push(new TextRun({ ...run, italics: true }));
               });
-              noteRuns.push(...contentRuns);
               docChildren.push(
                 new Paragraph({
                   children: noteRuns,
@@ -782,7 +798,7 @@ export function SlideEditor({
           ))}
         </CardContent>
       </Card>
-      
+
       {selectedIndices.length > 0 && (
         <div className="sticky bottom-4 z-10 mx-auto flex w-fit flex-wrap justify-center gap-2 rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm">
           <AlertDialog
