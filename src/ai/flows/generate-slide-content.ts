@@ -124,7 +124,7 @@ Format the entire output as a JSON array of slide objects. Each slide object mus
 4.  **Bolding**: For "paragraph" and list "items", use the 'bold' array to specify substrings of the 'text' that should be bolded. **Do NOT use markdown like '**text**' inside any text fields.**
 5.  **Table Rules (CRITICAL):**
     *   When creating a "table" content item, the number of items in each 'cells' array inside 'rows' MUST be exactly equal to the number of items in the 'headers' array.
-    *   Before outputting the JSON, you MUST validate every table. If a row has a different number of cells than the header, you MUST correct it.
+    *   Before outputting the JSON, you MUST validate every table. If a row has a different number of cells than the header, you MUST correct it. **This is a strict requirement; failure to comply will result in an error.**
 
 Supported "type" values for content items:
 - **"paragraph"**: For a block of text. This should be used sparingly.

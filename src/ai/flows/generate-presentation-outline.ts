@@ -23,16 +23,22 @@ const clinicalQuestionPrompt = ai.definePrompt({
   input: { schema: PresentationOutlineInputSchema },
   output: { schema: PresentationOutlineOutputSchema },
   prompt: `
-    Based on the following clinical question, answer, and reasoning, generate a structured outline for a medical presentation.
-    The outline should consist of a list of topics and sub-topics.
-    The VERY FIRST topic in the outline MUST be "Clinical Question, Answer, and Analysis Summary".
-    Subsequent topics should be technical and appropriate for a medical audience, directly related to the clinical case presented in the question, answer, and reasoning.
+    You are an expert medical educator creating a presentation outline based on a specific clinical case.
+    **Audience:** Postgraduate medical students (MD/MS, PhD) and specialists.
+    **Task:** Generate a presentation outline of 10-12 topics based on the clinical case provided.
 
-    Question: {{question}}
-    Answer: {{answer}}
-    Reasoning: {{reasoning}}
+    **Constraint Checklist & Output Format:**
+    1.  **JSON Output:** The output MUST be a valid JSON object with a single key "outline" containing an array of strings (the topics).
+    2.  **First Topic:** The VERY FIRST topic in the outline MUST be "Clinical Case Summary and Key Questions".
+    3.  **Advanced Content:** The subsequent 10-11 topics must be advanced and directly relevant to the case, covering aspects like differential diagnosis, at least 3 case studies, advanced diagnostics, detailed management protocols, landmark trials and recent guidelines.
+    4.  **Strict Topic Limit:** The total number of topics should be between 10 and 12.
 
-    Generate a JSON object with a single key "outline" containing an array of strings.
+    **Clinical Case Details:**
+    - **Question:** {{question}}
+    - **Answer:** {{answer}}
+    - **Reasoning:** {{reasoning}}
+
+    Generate the outline now, adhering strictly to all constraints.
   `,
 });
 
@@ -41,22 +47,23 @@ const generalTopicPrompt = ai.definePrompt({
   input: { schema: z.object({ topic: z.string() }) },
   output: { schema: PresentationOutlineOutputSchema },
   prompt: `
-    You are an expert in medical education, tasked with creating a presentation outline for the medical topic: **{{topic}}**.
-    The audience consists of postgraduate medical professionals in India (PG, MD), so the content must be advanced, in-depth, and clinically relevant.
+    You are an expert medical educator. Your task is to generate a concise and high-yield presentation outline for the medical topic: **{{topic}}**.
 
-    **Constraint Checklist & Output Format:**
-    1.  **Max 15 Topics:** The final outline MUST contain a maximum of 15 topics.
-    2.  **JSON Output:** The output MUST be a valid JSON object with a single key "outline" containing an array of strings (the topics).
-    3.  **Content Structure:** The first 3-5 topics should cover intermediate-level concepts to establish a foundation. The remaining topics (up to 10) must be advanced, focusing on postgraduate-level knowledge, recent advances, and clinical practice.
-    4.  **No Generalities:** Avoid basic or overly general topics. Focus on the complexities and nuances of the subject.
+    **Audience:** Postgraduate medical students (MD/MS), DNB candidates, and advanced MBBS interns in India.
 
-    **Example Outline Structure:**
-    - Foundational Concepts (3-5 topics)
-    - Advanced Topics (up to 10 topics)
+    **Constraints & Output Format:**
+    1.  **Strict 15 Topics Limit:** Provide exactly 15 slide titles in total.
+    2.  **JSON Output Only:** Output a valid JSON object with a single key "outline" whose value is an array of 15 strings.
+    3.  **Content Distribution:**
+        - First **4-5 slides**: Intermediate foundational understanding (but not basic undergraduate).
+        - Remaining **10-11 slides**: Advanced clinical, diagnostic, and management-oriented insights suitable for PG-level viva or presentations, including more than 2case studies.
+    4.  **Topic Variety & Depth:**
+        - Ensure logical progression: from concept -> mechanism -> clinical application -> research/updates.
+        - Include diagnostic criteria, classification systems, relevant investigations, treatment modalities, and complications.
+        - Where relevant, include recent guidelines, landmark trials, or Indian-specific practice patterns.
+    5.  **Avoid:** Vague headers like "Introduction" or "Definition".
 
-    **Topic:** {{topic}}
-
-    Generate the presentation outline now, adhering strictly to all constraints.
+    Generate the outline for **{{topic}}** now, adhering strictly to all constraints.
   `,
 });
 
