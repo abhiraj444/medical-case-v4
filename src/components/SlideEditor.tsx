@@ -1,5 +1,10 @@
 'use client';
 
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
 import { useEffect, useState } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -64,12 +69,26 @@ import {
   PlusCircle,
   File,
 } from 'lucide-react';
-import { modifySlides } from '@/ai/flows/modify-slides';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from './ui/label';
 import type { Slide, ContentItem, ParagraphContent, ListItemContent } from '@/types';
 export type { Slide };
 
+
+const SortableItem = ({ id, children }) => {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {children}
+    </div>
+  );
+};
 
 const BoldRenderer = ({ text, bold }: { text: string; bold?: string[] }) => {
   if (!text) return null;
@@ -154,6 +173,8 @@ export function SlideEditor({
   onRefresh,
   onSlidesUpdate,
   onNewCase,
+  question,
+  outline,
 }: {
   initialSlides: Slide[];
   topic: string;
@@ -161,13 +182,27 @@ export function SlideEditor({
   onRefresh: () => void;
   onSlidesUpdate: (slides: Slide[]) => void;
   onNewCase: () => void;
+  question: string;
+  outline: string[];
 }) {
   const [slides, setSlides] = useState<Slide[]>(initialSlides);
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [topic, setTopic] = useState(initialTopic);
   const [isModifying, setIsModifying] = useState(false);
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
+  const [isAddSectionModalOpen, setIsAddSectionModalOpen] = useState(false);
+  const [newTopicSuggestions, setNewTopicSuggestions] = useState<string[]>([]);
+  const [customTopic, setCustomTopic] = useState('');
+  const [selectedNewTopics, setSelectedNewTopics] = useState<string[]>([]);
+  const [isSuggestingTopics, setIsSuggestingTopics] = useState(false);
   const { toast } = useToast();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   useEffect(() => {
     setSlides(initialSlides);
@@ -190,15 +225,96 @@ export function SlideEditor({
     }
   };
 
-  const addSlide = () => {
-    const newSlide: Slide = { title: 'New Slide', content: [{ type: 'paragraph', text: 'New content...' }] };
-    const newSlides = [...slides, newSlide];
-    setSlides(newSlides);
-    onSlidesUpdate(newSlides);
+  const fetchNewTopicSuggestions = async () => {
+    if (!question || !outline) {
+      console.error("Question or outline is undefined, cannot fetch new topic suggestions.");
+      toast({ title: 'Error', description: 'Missing context to fetch new topic suggestions.', variant: 'destructive' });
+      return;
+    }
+    setIsSuggestingTopics(true);
+    try {
+      const response = await fetch('/api/suggest-topics', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question,
+          existingTopics: [...outline, ...newTopicSuggestions],
+        }),
+      });
+      const data = await response.json();
+      setNewTopicSuggestions((prev) => {
+        const incomingTopics = Array.isArray(data.topics) ? data.topics : [];
+        const uniqueTopics = new Set([...prev, ...incomingTopics]);
+        return Array.from(uniqueTopics);
+      });
+    } catch (error) {
+      console.error('Failed to suggest new topics:', error);
+      toast({ title: 'Error', description: 'Could not fetch topic suggestions.', variant: 'destructive' });
+    } finally {
+      setIsSuggestingTopics(false);
+    }
+  };
+
+  const handleAddSectionClick = async () => {
+    setIsAddSectionModalOpen(true);
+    setSelectedNewTopics([]); // Clear previous selections
+    setCustomTopic(''); // Clear custom topic
+    if (newTopicSuggestions.length === 0) {
+      await fetchNewTopicSuggestions();
+    }
+  };
+
+  const handleAddSelectedSlides = async () => {
+    setIsAddSectionModalOpen(false);
+    setIsModifying(true);
+    const topicsToGenerate = [...selectedNewTopics];
+    if (customTopic.trim()) {
+      topicsToGenerate.push(customTopic.trim());
+    }
+
+    if (topicsToGenerate.length === 0) {
+      toast({ title: 'No Topics Selected', description: 'Please select or enter a topic to add a new slide.', variant: 'destructive' });
+      setIsModifying(false);
+      return;
+    }
+
+    try {
+      let generatedSlides: Slide[] = [];
+      for (const topic of topicsToGenerate) {
+        const response = await fetch('/api/modify-slides', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'add_slide',
+            payload: {
+              customTopic: topic,
+            },
+          }),
+        });
+        const newSlideContent = await response.json();
+        generatedSlides = [...generatedSlides, ...newSlideContent];
+      }
+
+      const newSlides = [...slides, ...generatedSlides];
+      setSlides(newSlides);
+      onSlidesUpdate(newSlides);
+      toast({ title: 'Slides Added', description: `Added ${topicsToGenerate.length} new slide(s).` });
+    } catch (error) {
+      console.error('Failed to add slide:', error);
+      toast({ title: 'Error', description: 'Failed to add the new slide.', variant: 'destructive' });
+    } finally {
+      setIsModifying(false);
+    }
   };
 
   const removeSlide = (index: number) => {
-    const newSlides = slides.filter((_, i) => i !== index);
+    const newSlides = slides.filter(
+      (_, i) => i !== index
+    );
     setSlides(newSlides);
     onSlidesUpdate(newSlides);
     setSelectedIndices((prev) =>
@@ -234,7 +350,17 @@ export function SlideEditor({
     setIsModifying(true);
     setIsRefreshModalOpen(false);
     try {
-      const result = await modifySlides({ slides, selectedIndices, action });
+      const response = await fetch('/api/modify-slides', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'modifySlides',
+          payload: { slides, selectedIndices, action },
+        }),
+      });
+      const result = await response.json();
       setSlides(result);
       onSlidesUpdate(result);
       setSelectedIndices([]);
@@ -251,6 +377,20 @@ export function SlideEditor({
       });
     } finally {
       setIsModifying(false);
+    }
+  };
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+
+    if (active.id !== over.id) {
+      setSlides((items) => {
+        const oldIndex = items.findIndex((item) => item.title === active.id);
+        const newIndex = items.findIndex((item) => item.title === over.id);
+        const newSlides = arrayMove(items, oldIndex, newIndex);
+        onSlidesUpdate(newSlides);
+        return newSlides;
+      });
     }
   };
 
@@ -766,7 +906,7 @@ export function SlideEditor({
               </Button>
               <Button
                 variant="outline"
-                onClick={addSlide}
+                onClick={handleAddSectionClick}
                 disabled={isModifying}
                 className="w-full sm:w-auto"
               >
@@ -816,38 +956,113 @@ export function SlideEditor({
             </Label>
           </div>
 
-          {slides.map((slide, index) => (
-            <Card
-              key={index}
-              className="relative overflow-hidden bg-background/50 transition-all duration-300 data-[selected=true]:bg-accent/20 data-[selected=true]:ring-2 data-[selected=true]:ring-accent"
-              data-selected={selectedIndices.includes(index)}
-            >
-              <CardHeader className="flex flex-row items-center justify-between p-4">
-                <div className="flex items-center gap-3">
-                  <Checkbox
-                    id={`select-${index}`}
-                    checked={selectedIndices.includes(index)}
-                    onCheckedChange={() => handleSelectionChange(index)}
-                    aria-label={`Select slide ${index + 1}`}
-                  />
-                  <h3 className="text-lg font-semibold">{slide.title}</h3>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeSlide(index)}
-                  className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </CardHeader>
-              <CardContent className="p-4 pt-0 pl-12">
-                {slide.content.map(renderContentItem)}
-              </CardContent>
-            </Card>
-          ))}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={slides.map(s => s.title)} strategy={verticalListSortingStrategy}>
+              {slides.map((slide, index) => (
+                <SortableItem key={slide.title} id={slide.title}>
+                  <Card
+                    className="relative overflow-hidden bg-background/50 transition-all duration-300 data-[selected=true]:bg-accent/20 data-[selected=true]:ring-2 data-[selected=true]:ring-accent"
+                    data-selected={selectedIndices.includes(index)}
+                  >
+                    <CardHeader className="flex flex-row items-center justify-between p-4">
+                      <div className="flex items-center gap-3">
+                        <Checkbox
+                          id={`select-${index}`}
+                          checked={selectedIndices.includes(index)}
+                          onCheckedChange={() => handleSelectionChange(index)}
+                          aria-label={`Select slide ${index + 1}`}
+                        />
+                        <h3 className="text-lg font-semibold">{slide.title}</h3>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeSlide(index)}
+                        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0 pl-12">
+                      {slide.content.map(renderContentItem)}
+                    </CardContent>
+                  </Card>
+                </SortableItem>
+              ))}
+            </SortableContext>
+          </DndContext>
         </CardContent>
       </Card>
+
+      <AlertDialog open={isAddSectionModalOpen} onOpenChange={setIsAddSectionModalOpen}>
+        <AlertDialogContent className="max-h-[90vh] overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Add New Section</AlertDialogTitle>
+            <AlertDialogDescription>
+              Select suggested topics or enter your own to add new slides to your presentation.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-4 py-4">
+            {isSuggestingTopics ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <span className="ml-2 text-muted-foreground">Loading new topics...</span>
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                {newTopicSuggestions.length > 0 && (
+                  <p className="text-sm font-medium">Suggested Topics:</p>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {newTopicSuggestions.map((topic, index) => (
+                    <div key={index} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`new-topic-${index}`}
+                        checked={selectedNewTopics.includes(topic)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedNewTopics((prev) => [...prev, topic]);
+                          } else {
+                            setSelectedNewTopics((prev) =>
+                              prev.filter((t) => t !== topic)
+                            );
+                          }
+                        }}
+                      />
+                      <Label htmlFor={`new-topic-${index}`} className="font-normal">
+                        {topic}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+                {newTopicSuggestions.length > 0 && (
+                  <Button variant="outline" onClick={fetchNewTopicSuggestions} className="mt-2">
+                    <RefreshCw className="mr-2 h-4 w-4" /> Generate More Topics
+                  </Button>
+                )}
+              </div>
+            )}
+            <div className="flex flex-col gap-2 mt-4">
+              <Label htmlFor="custom-topic">Or enter a custom topic:</Label>
+              <Input
+                id="custom-topic"
+                placeholder="e.g., 'Advanced Diagnostic Techniques'"
+                value={customTopic}
+                onChange={(e) => setCustomTopic(e.target.value)}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={fetchNewTopicSuggestions} disabled={isSuggestingTopics}>
+              {isSuggestingTopics ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />} Generate More Topics
+            </Button>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button onClick={handleAddSelectedSlides} disabled={isModifying || (selectedNewTopics.length === 0 && !customTopic.trim())}>
+              {isModifying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />} Add Selected
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {selectedIndices.length > 0 && (
         <div className="sticky bottom-4 z-10 mx-auto flex w-fit flex-wrap justify-center gap-2 rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm">

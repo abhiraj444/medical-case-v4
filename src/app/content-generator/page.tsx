@@ -2,7 +2,7 @@
 
 import { useState, type ChangeEvent, type ClipboardEvent, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { generateSlideOutline } from '@/ai/flows/generate-slide-outline';
+
 import { answerClinicalQuestion, type AnswerClinicalQuestionOutput } from '@/ai/flows/answer-clinical-question';
 import { summarizeQuestion } from '@/ai/flows/summarize-question';
 import { Button } from '@/components/ui/button';
@@ -41,8 +41,9 @@ export default function ContentGeneratorPage() {
   const [result, setResult] = useState<AnswerClinicalQuestionOutput | null>(null);
   const [structuredQuestion, setStructuredQuestion] = useState<StructuredQuestion | null>(null);
   const [slides, setSlides] = useState<Slide[] | null>(null);
+  const [presentationOutline, setPresentationOutline] = useState<string[] | null>(null);
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [currentCaseId, setCurrentCaseId] = useState<string | null>(null);
-  const [slideCount, setSlideCount] = useState('8-10');
 
   const { toast } = useToast();
   const { user, loading: authLoading } = useAuth();
@@ -87,6 +88,7 @@ export default function ContentGeneratorPage() {
                 const outputData = await response.json();
                 setResult(outputData.result || null);
                 setSlides(outputData.slides || null);
+                setPresentationOutline(outputData.outline || null);
               } catch (e) {
                 console.error("Failed to parse output data from storage", e);
                 toast({ title: "Error", description: "Failed to load case results from storage.", variant: 'destructive' });
@@ -317,23 +319,69 @@ export default function ContentGeneratorPage() {
     }
   }
 
-  const handleGeneratePresentation = async () => {
+  const handleGenerateOutline = async () => {
     if (!result?.topic || !user || !currentCaseId) {
-      if (!currentCaseId) {
-        toast({ title: "Error", description: "Cannot generate presentation without a saved case.", variant: "destructive" });
-      }
       return;
     }
 
     setIsLoading(true);
     try {
-      const generatedSlides = await generateSlideOutline({ 
-        topic: result.topic, 
-        numberOfSlides: slideCount,
-        question: structuredQuestion?.summary,
-        answer: result.answer,
-        reasoning: result.reasoning
+      const response = await fetch('/api/content-generator', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'generateOutline',
+          payload: {
+            question: structuredQuestion?.summary || '',
+            answer: result.answer,
+            reasoning: result.reasoning,
+          },
+        }),
       });
+      const data = await response.json();
+      setPresentationOutline(data.outline);
+      setSelectedTopics(data.outline);
+    } catch (error) {
+      console.error('Outline generation failed:', error);
+      toast({
+        title: 'An Error Occurred',
+        description: 'Failed to generate outline. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGeneratePresentation = async () => {
+    if (!result?.topic || !user || !currentCaseId || selectedTopics.length === 0) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/content-generator', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'generateSlides',
+          payload: {
+            topic: result.topic,
+            question: structuredQuestion?.summary,
+            answer: result.answer,
+            reasoning: result.reasoning,
+            selectedTopics,
+            fullQuestion: question, // Pass the full question
+            fullAnswer: result.answer, // Pass the full answer
+            fullReasoning: result.reasoning, // Pass the full reasoning
+          },
+        }),
+      });
+      const generatedSlides = await response.json();
       setSlides(generatedSlides);
 
       const caseRef = doc(db, 'cases', currentCaseId);
@@ -344,10 +392,11 @@ export default function ContentGeneratorPage() {
       }
 
       const caseData = caseSnap.data();
-      const response = await fetch(caseData.outputDataUrl);
-      const outputData = await response.json();
+      const outputDataResponse = await fetch(caseData.outputDataUrl);
+      const outputData = await outputDataResponse.json();
 
       outputData.slides = generatedSlides;
+      outputData.outline = presentationOutline;
 
       const outputDataString = JSON.stringify(outputData);
       const outputDataBlob = new Blob([outputDataString], { type: 'application/json' });
@@ -361,10 +410,10 @@ export default function ContentGeneratorPage() {
 
       toast({ title: 'Presentation Generated', description: 'Your presentation has been added to the case.' });
     } catch (error) {
-      console.error('Outline generation failed:', error);
+      console.error('Presentation generation failed:', error);
       toast({
         title: 'An Error Occurred',
-        description: 'Failed to generate outline. Please try again.',
+        description: 'Failed to generate presentation. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -585,25 +634,41 @@ export default function ContentGeneratorPage() {
                     </Accordion>
                 )}
                 
-                {!slides && (
+                {!slides && !presentationOutline && (
                   <div className="mt-4 flex flex-col sm:flex-row items-center gap-4 rounded-lg border p-4">
-                      <div className="flex-grow space-y-2">
-                          <Label htmlFor="slide-count">Presentation Length</Label>
-                          <Select value={slideCount} onValueChange={setSlideCount}>
-                              <SelectTrigger id="slide-count" className="w-full sm:w-[180px]">
-                                  <SelectValue placeholder="Select number of slides" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                  <SelectItem value="5-7">Short (5-7 Slides)</SelectItem>
-                                  <SelectItem value="8-10">Medium (8-10 Slides)</SelectItem>
-                                  <SelectItem value="11-15">Long (11-15 Slides)</SelectItem>
-                              </SelectContent>
-                          </Select>
-                      </div>
-                      <Button onClick={handleGeneratePresentation} disabled={isLoading} className="w-full sm:w-auto">
+                      <Button onClick={handleGenerateOutline} disabled={isLoading} className="w-full sm:w-auto">
                           {isLoading ? <Loader2 className="animate-spin"/> : <Wand2 />}
-                          Generate Presentation
+                          Generate Presentation Outline
                       </Button>
+                  </div>
+                )}
+
+                {presentationOutline && !slides && (
+                  <div className="mt-4 rounded-lg border p-4">
+                    <h3 className="text-lg font-semibold">Select Topics for Your Presentation</h3>
+                    <div className="mt-4 space-y-2">
+                      {presentationOutline.map((topic, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id={`topic-${index}`}
+                            checked={selectedTopics.includes(topic)}
+                            onChange={() => {
+                              if (selectedTopics.includes(topic)) {
+                                setSelectedTopics(selectedTopics.filter((t) => t !== topic));
+                              } else {
+                                setSelectedTopics([...selectedTopics, topic]);
+                              }
+                            }}
+                          />
+                          <label htmlFor={`topic-${index}`}>{topic}</label>
+                        </div>
+                      ))}
+                    </div>
+                    <Button onClick={handleGeneratePresentation} disabled={isLoading || selectedTopics.length === 0} className="mt-4 w-full sm:w-auto">
+                      {isLoading ? <Loader2 className="animate-spin"/> : <Wand2 />}
+                      Generate Presentation
+                    </Button>
                   </div>
                 )}
             </CardContent>
@@ -645,6 +710,8 @@ export default function ContentGeneratorPage() {
                     }
                 }}
                 onNewCase={handleNewCase}
+                question={question}
+                outline={presentationOutline || []}
             />
         )}
       </div>

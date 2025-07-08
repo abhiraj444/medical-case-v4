@@ -1,0 +1,66 @@
+Error calling action: [Error [GenkitError]: INVALID_ARGUMENT: Schema validation failed. Parse Errors:
+
+- (root): must be object
+
+Provided data:
+
+undefined
+
+Required JSON schema:
+
+{
+  "type": "object",
+  "properties": {
+    "question": {
+      "type": "string"
+    },
+    "existingTopics": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "question",
+    "existingTopics"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}] {
+  source: undefined,
+  status: 'INVALID_ARGUMENT',
+  detail: [Object],
+  code: 400,
+  originalMessage: 'Schema validation failed. Parse Errors:\n' +
+    '\n' +
+    '- (root): must be object\n' +
+    '\n' +
+    'Provided data:\n' +
+    '\n' +
+    'undefined\n' +
+    '\n' +
+    'Required JSON schema:\n' +
+    '\n' +
+    '{\n' +
+    '  "type": "object",\n' +
+    '  "properties": {\n' +
+    '    "question": {\n' +
+    '      "type": "string"\n' +
+    '    },\n' +
+    '    "existingTopics": {\n' +
+    '      "type": "array",\n' +
+    '      "items": {\n' +
+    '        "type": "string"\n' +
+    '      }\n' +
+    '    }\n' +
+    '  },\n' +
+    '  "required": [\n' +
+    '    "question",\n' +
+    '    "existingTopics"\n' +
+    '  ],\n' +
+    '  "additionalProperties": true,\n' +
+    '  "$schema": "http://json-schema.org/draft-07/schema#"\n' +
+    '}'
+}
+ POST /api/suggest-topics 400 in 477ms
