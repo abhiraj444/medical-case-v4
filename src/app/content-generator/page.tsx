@@ -69,7 +69,11 @@ export default function ContentGeneratorPage() {
           if (caseSnap.exists() && caseSnap.data().userId === user.uid) {
             const caseData = caseSnap.data();
             setMode(caseData.inputData.mode);
-            setQuestion(caseData.inputData.question || '');
+            if (caseData.inputData.mode === 'question') {
+                setQuestion(caseData.inputData.question || '');
+            } else if (caseData.inputData.mode === 'topic') {
+                setTopic(caseData.inputData.topic || '');
+            }
             setImageFiles([]);
             if (caseData.inputData.structuredQuestion) {
               setStructuredQuestion({
