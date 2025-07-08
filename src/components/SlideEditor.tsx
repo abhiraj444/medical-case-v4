@@ -73,7 +73,12 @@ import { registerNotoSansItalic } from '@/lib/pdf-fonts/NotoSansItalic';
 
 export type { Slide };
 
-const SortableItem = ({ id, children }) => {
+interface SortableItemProps {
+  id: string | number;
+  children: React.ReactNode;
+}
+
+const SortableItem: React.FC<SortableItemProps> = ({ id, children }) => {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
 
   const style = {
@@ -324,7 +329,13 @@ export function SlideEditor({
       toast({ title: 'Slides Added', description: `Successfully added ${newSlides.length} new slide(s).` });
     } catch (error) {
       console.error('Failed to add slides:', error);
-      toast({ title: 'Error Adding Slides', description: error.message, variant: 'destructive' });
+      let description = 'An unknown error occurred.';
+      if (error instanceof Error) {
+        description = error.message;
+      } else if (typeof error === 'string') {
+        description = error;
+      }
+      toast({ title: 'Error Adding Slides', description, variant: 'destructive' });
     } finally {
       setIsModifying(false);
     }
@@ -402,7 +413,7 @@ export function SlideEditor({
     }
   };
 
-  const handleDragEnd = (event) => {
+  const handleDragEnd = (event: any) => {
     const { active, over } = event;
     if (active.id !== over.id) {
       setSlides((items) => {
@@ -426,102 +437,224 @@ export function SlideEditor({
   const handleExportToPdf = () => {
     setIsModifying(true);
     try {
-      const doc = new jsPDF();
-      registerNotoSansRegular(doc);
-      registerNotoSansBold(doc);
-      registerNotoSansItalic(doc);
-      
-      doc.setFont('NotoSans');
+        // Initialize jsPDF document
+        const doc = new jsPDF();
+        // Register your custom fonts with jsPDF
+        registerNotoSansRegular(doc);
+        registerNotoSansBold(doc);
+        registerNotoSansItalic(doc);
+        // Set the default font for the document to 'NotoSans'
+        // This name 'NotoSans' must match the name used in registerNotoSansX functions
+        doc.setFont('NotoSans');
+        const margin = 20; // Page margin in mm
+        let currentY = margin; // Current Y position on the page
+        const pageHeight = doc.internal.pageSize.height; // Total page height
+        const pageWidth = doc.internal.pageSize.width; // Total page width
+        const contentWidth = pageWidth - 2 * margin; // Usable content width
 
-      let yPos = 15;
-      const margin = 15;
-      const pageHeight = doc.internal.pageSize.height;
-      const contentWidth = doc.internal.pageSize.width - margin * 2;
+        // Define colors - Explicitly define as tuples
+        const titleColor = '#4A90E2'; // Blue
+        const paragraphColor = '#333333'; // Dark Gray
+        const listItemColor = '#333333'; // Dark Gray
+        const headerBgColor: [number, number, number] = [220, 230, 240]; // Light blue-gray for table headers (RGB)
+        const headerTextColor = '#2C3E50'; // Dark blue-gray for table headers (Hex, will be converted by jsPDF)
+        const rowEvenColor: [number, number, number] = [255, 255, 255]; // White for even rows (RGB)
+        const rowOddColor: [number, number, number] = [245, 245, 245]; // Very light gray for odd rows (RGB)
 
-      const checkPageBreak = (neededHeight) => {
-        if (yPos + neededHeight > pageHeight - margin) {
-          doc.addPage();
-          yPos = margin;
-        }
-      };
+        // Function to add a new page and reset Y position to the top margin
+        const addNewPage = () => {
+            doc.addPage();
+            currentY = margin;
+        };
 
-      slides.forEach((slide, slideIndex) => {
-        if (slideIndex > 0) {
-          doc.addPage();
-          yPos = margin;
-        }
+        const renderTextBlock = (doc: jsPDF, text: string, boldParts: string[] | undefined, x: number, y: number, maxWidth: number, fontSize: number, textColor: string): number => {
+            doc.setFontSize(fontSize);
+            doc.setTextColor(textColor);
+            const lineHeight = fontSize * 0.4; // Estimate line height
 
-        doc.setFont('NotoSans', 'bold');
-        doc.setFontSize(18);
-        const titleLines = doc.splitTextToSize(slide.title, contentWidth);
-        doc.text(titleLines, margin, yPos);
-        yPos += titleLines.length * 7 + 5;
+            const segments: { text: string; isBold: boolean }[] = [];
+            const escapedBoldParts = (boldParts || []).map(bp => bp.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+            const regex = new RegExp(`(${escapedBoldParts.join('|')})`, 'g');
+            const parts = text.split(regex);
 
-        slide.content.forEach(item => {
-          doc.setFont('NotoSans', 'normal');
-          doc.setFontSize(12);
+            parts.forEach(part => {
+                if (part) {
+                    const isBold = escapedBoldParts.includes(part);
+                    segments.push({ text: part, isBold });
+                }
+            });
 
-          switch (item.type) {
-            case 'paragraph':
-              checkPageBreak(10);
-              const pLines = doc.splitTextToSize(item.text, contentWidth);
-              doc.text(pLines, margin, yPos);
-              yPos += pLines.length * 7 + 5;
-              break;
-            case 'bullet_list':
-              item.items.forEach(li => {
-                checkPageBreak(10);
-                doc.text(`• ${li.text}`, margin + 5, yPos);
-                yPos += 7;
-              });
-              yPos += 5;
-              break;
-            case 'numbered_list':
-              item.items.forEach((li, index) => {
-                checkPageBreak(10);
-                doc.text(`${index + 1}. ${li.text}`, margin + 5, yPos);
-                yPos += 7;
-              });
-              yPos += 5;
-              break;
-            case 'note':
-              checkPageBreak(10);
-              doc.setFont('NotoSans', 'italic');
-              const nLines = doc.splitTextToSize(`Note: ${item.text}`, contentWidth);
-              doc.text(nLines, margin, yPos);
-              yPos += nLines.length * 7 + 5;
-              break;
-            case 'table':
-              checkPageBreak(20);
-              (doc as any).autoTable({
-                startY: yPos,
-                head: [item.headers],
-                body: item.rows.map(r => r.cells),
-                theme: 'grid',
-                headStyles: {
-                  fillColor: [22, 160, 133],
-                  textColor: 255,
-                  fontStyle: 'bold',
-                },
-                styles: {
-                  font: 'NotoSans',
-                  fontStyle: 'normal',
-                },
-              });
-              yPos = (doc as any).autoTable.previous.finalY + 10;
-              break;
-          }
+            const lines: { text: string; isBold: boolean }[][] = [];
+            let currentLineSegments: { text: string; isBold: boolean }[] = [];
+            let currentLineText = '';
+
+            for (const segment of segments) {
+                const words = segment.text.split(/(\s+)/);
+
+                for (const word of words) {
+                    if (!word) continue;
+
+                    doc.setFont('NotoSans', segment.isBold ? 'bold' : 'normal');
+                    const wordWidth = doc.getTextWidth(word);
+
+                    if (doc.getTextWidth(currentLineText + word) > maxWidth && currentLineText !== '') {
+                        lines.push(currentLineSegments);
+                        currentLineSegments = [];
+                        currentLineText = '';
+                    }
+
+                    currentLineSegments.push({ text: word, isBold: segment.isBold });
+                    currentLineText += word;
+                }
+            }
+            if (currentLineSegments.length > 0) {
+                lines.push(currentLineSegments);
+            }
+
+            const estimatedHeight = lines.length * lineHeight;
+
+            if (currentY + estimatedHeight > pageHeight - margin) {
+                addNewPage();
+            }
+
+            const startYForBlock = currentY;
+
+            for (let i = 0; i < lines.length; i++) {
+                const lineSegments = lines[i];
+                let currentX = x;
+                const lineY = startYForBlock + (i * lineHeight);
+
+                for (const segment of lineSegments) {
+                    doc.setFont('NotoSans', segment.isBold ? 'bold' : 'normal');
+                    doc.text(segment.text, currentX, lineY);
+                    currentX += doc.getTextWidth(segment.text);
+                }
+            }
+
+            currentY += estimatedHeight;
+            return estimatedHeight;
+        };
+
+        const renderTable = (doc: jsPDF, headers: string[], rows: { cells: string[] }[], x: number, y: number, maxWidth: number, fontSize: number) => {
+            doc.setFontSize(fontSize);
+            const tableLineHeight = fontSize * 0.4;
+            const cellPadding = 2;
+            const numColumns = headers.length;
+            const colWidth = maxWidth / numColumns;
+
+            const drawTableHeaders = () => {
+                doc.setFont('NotoSans', 'bold');
+                let headerX = x;
+                let maxHeaderHeight = tableLineHeight + 2 * cellPadding;
+
+                headers.forEach(headerText => {
+                    const lines = doc.splitTextToSize(headerText, colWidth - 2 * cellPadding);
+                    maxHeaderHeight = Math.max(maxHeaderHeight, lines.length * tableLineHeight + 2 * cellPadding);
+                });
+
+                headers.forEach(headerText => {
+                    doc.setFillColor(headerBgColor[0], headerBgColor[1], headerBgColor[2]);
+                    doc.rect(headerX, currentY, colWidth, maxHeaderHeight, 'F');
+                    doc.setTextColor(headerTextColor);
+                    const lines = doc.splitTextToSize(headerText, colWidth - 2 * cellPadding);
+                    doc.text(lines, headerX + cellPadding, currentY + cellPadding + (maxHeaderHeight - lines.length * tableLineHeight) / 2);
+                    headerX += colWidth;
+                });
+                doc.setFont('NotoSans', 'normal');
+                doc.setTextColor(paragraphColor);
+                currentY += maxHeaderHeight;
+            };
+
+            if (currentY + (tableLineHeight + 2 * cellPadding) > pageHeight - margin) {
+                addNewPage();
+            }
+            drawTableHeaders();
+
+            rows.forEach((row, rowIndex) => {
+                let rowHeight = tableLineHeight + 2 * cellPadding;
+
+                row.cells.forEach(cellText => {
+                    const lines = doc.splitTextToSize(cellText, colWidth - 2 * cellPadding);
+                    rowHeight = Math.max(rowHeight, lines.length * tableLineHeight + 2 * cellPadding);
+                });
+
+                if (currentY + rowHeight > pageHeight - margin) {
+                    addNewPage();
+                    drawTableHeaders();
+                }
+
+                let cellX = x;
+                const fillColor = rowIndex % 2 === 0 ? rowEvenColor : rowOddColor;
+
+                row.cells.forEach(cellText => {
+                    doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
+                    doc.rect(cellX, currentY, colWidth, rowHeight, 'F');
+                    doc.rect(cellX, currentY, colWidth, rowHeight, 'S');
+                    doc.setTextColor(listItemColor);
+                    doc.setFont('NotoSans', 'normal');
+                    const lines = doc.splitTextToSize(cellText, colWidth - 2 * cellPadding);
+                    doc.text(lines, cellX + cellPadding, currentY + cellPadding + (rowHeight - lines.length * tableLineHeight) / 2);
+                    cellX += colWidth;
+                });
+                currentY += rowHeight;
+            });
+        };
+
+        slides.forEach((slide, slideIndex) => {
+            if (slideIndex > 0) {
+                addNewPage();
+            }
+
+            doc.setFontSize(18);
+            doc.setFont('NotoSans', 'bold');
+            doc.setTextColor(titleColor);
+            const titleLines = doc.splitTextToSize(slide.title, contentWidth);
+            const titleHeight = titleLines.length * 18 * 0.4;
+
+            if (currentY + titleHeight > pageHeight - margin) {
+                addNewPage();
+            }
+            doc.text(titleLines, margin, currentY);
+            currentY += titleHeight + 15;
+            doc.setFont('NotoSans', 'normal');
+
+            slide.content.forEach(block => {
+                if (block.type === 'paragraph') {
+                    renderTextBlock(doc, block.text, block.bold, margin, currentY, contentWidth, 12, paragraphColor);
+                    currentY += 10;
+                } else if (block.type === 'bullet_list' || block.type === 'numbered_list') {
+                    const listItemIndent = 10;
+                    const itemSpacing = 3;
+                    doc.setFontSize(11);
+
+                    block.items.forEach((item, index) => {
+                        const prefix = block.type === 'bullet_list' ? '• ' : `${index + 1}. `;
+                        const itemText = prefix + item.text;
+                        const boldParts = item.bold || [];
+
+                        const itemHeight = renderTextBlock(doc, itemText, boldParts, margin + listItemIndent, currentY, contentWidth - listItemIndent, 11, listItemColor);
+                        currentY += itemSpacing;
+                    });
+                    currentY += 10;
+                } else if (block.type === 'table') {
+                    renderTable(doc, block.headers, block.rows, margin, currentY, contentWidth, 10);
+                    currentY += 10;
+                }
+            });
         });
-      });
 
-      const docName = `${topic.replace(/\s+/g, '_') || 'document'}.pdf`;
-      doc.save(docName);
-      toast({ title: 'PDF Downloaded', description: 'Your PDF has been downloaded.' });
+        const docName = `${topic.replace(/\s+/g, '_') || 'document'}.pdf`;
+        doc.save(docName);
+        toast({
+          title: 'Document Downloaded',
+          description: 'Your PDF document has been downloaded locally.',
+        });
+
     } catch (error) {
-      console.error('Error generating PDF:', error);
-      toast({ title: 'Error', description: 'Failed to generate PDF.', variant: 'destructive' });
+        console.error('Error generating PDF:', error);
+        toast({ title: 'Error', description: 'Failed to generate PDF.', variant: 'destructive' });
     } finally {
-      setIsModifying(false);
+        setIsModifying(false);
     }
   };
 
