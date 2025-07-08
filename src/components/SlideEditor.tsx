@@ -71,10 +71,6 @@ import { registerNotoSansRegular } from '@/lib/pdf-fonts/NotoSansRegular';
 import { registerNotoSansBold } from '@/lib/pdf-fonts/NotoSansBold';
 import { registerNotoSansItalic } from '@/lib/pdf-fonts/NotoSansItalic';
 
-export type { Slide };
-
-
-
 const BoldRenderer = ({ text, bold }: { text: string; bold?: string[] }) => {
   if (!text) return null;
   if (!bold || bold.length === 0) {
@@ -757,26 +753,23 @@ export function SlideEditor({
           </div>
 
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={slides.map(s => s.title)} strategy={verticalListSortingStrategy}>
-              {slides.map((slide, index) => {
-                const { attributes, listeners, setNodeRef, transform, transition, setActivatorNodeRef } = useSortable({ id: slide.title });
-
-                const style = {
-                  transform: CSS.Transform.toString(transform),
-                  transition,
-                };
-
-                return (
+            <SortableContext items={slides.map((s, i) => s.title)} strategy={verticalListSortingStrategy}>
+              {slides.map((slide, index) => (
+                <div
+                  key={slide.title}
+                  {...useSortable({ id: slide.title }).attributes}
+                  {...useSortable({ id: slide.title }).listeners}
+                  ref={useSortable({ id: slide.title }).setNodeRef}
+                  style={{
+                    transform: CSS.Transform.toString(useSortable({ id: slide.title }).transform),
+                    transition: useSortable({ id: slide.title }).transition,
+                  }}
+                >
                   <Card
-                    ref={setNodeRef}
-                    style={style}
-                    {...attributes}
-                    {...listeners}
-                    key={slide.title + '-' + index}
-                    className="relative overflow-hidden bg-background/50 transition-all duration-300 data-[selected=true]:bg-accent/50 data-[selected=true]:ring-1 data-[selected=true]:ring-accent"
+                    className="relative overflow-hidden bg-background/50 transition-all duration-300 data-[selected=true]:bg-accent/50 data-[selected=true]:ring-1 data-[selected=true]:ring-accent cursor-grab"
                     data-selected={selectedIndices.includes(index)}
                   >
-                    <CardHeader className="flex flex-row items-center justify-between p-4 cursor-grab" >
+                    <CardHeader className="flex flex-row items-center justify-between p-4" >
                       <div className="flex items-center gap-3">
                         <Checkbox id={`select-${index}`} checked={selectedIndices.includes(index)} onCheckedChange={(checked) => handleSelectionChange(index, !!checked)} aria-label={`Select slide ${index + 1}`} />
                         <h3 className="text-lg font-semibold">{slide.title}</h3>
@@ -787,8 +780,8 @@ export function SlideEditor({
                       {slide.content.map(renderContentItem)}
                     </CardContent>
                   </Card>
-                );
-              })}
+                </div>
+              ))}
             </SortableContext>
           </DndContext>
         </CardContent>
@@ -854,7 +847,7 @@ export function SlideEditor({
               </AlertDialogHeader>
               <div className="grid gap-4 py-4">
                 <Button variant="outline" className="h-auto justify-start text-left" onClick={() => handleModifySlides('expand_content')}><div className="flex flex-col"><span className="font-semibold">Expand Content</span><span className="text-sm text-muted-foreground">Generate more detailed content, possibly adding more sections.</span></div></Button>
-                <Button variant="outline" className="h-auto justify-start text-left" onClick={() => handleModifySlides('replace_content')}><div className="flex flex-col"><span className="font-semibold">Replace Content</span><span className="text-muted-foreground">Generate alternative content for the same topics.</span></div></Button>
+                <Button variant="outline" className="h-auto justify-start text-left" onClick={() => handleModifySlides('replace_content')}><div className="flex flex-col"><span className="font-semibold">Replace Content</span><span className="text-sm text-muted-foreground">Generate alternative content for the same topics.</span></div></Button>
               </div>
               <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel></AlertDialogFooter>
             </AlertDialogContent>
