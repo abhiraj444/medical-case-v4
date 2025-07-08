@@ -759,7 +759,6 @@ export function SlideEditor({
               <Input id="topic-refresh" value={topic} onChange={(e) => setTopic(e.target.value)} />
             </div>
             <div className="flex flex-wrap items-end gap-2">
-              <Button variant="outline" onClick={handleRefreshClick} disabled={isModifying} className="w-full sm:w-auto"><RefreshCw className="mr-2 h-4 w-4" />Refresh Topic</Button>
               <Button variant="outline" onClick={handleAddSectionClick} disabled={isModifying} className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" />Add Section</Button>
               <Button variant="outline" onClick={handleCopyRawContent} disabled={isModifying || slides.length === 0} className="w-full sm:w-auto"><ClipboardCopy className="mr-2 h-4 w-4" />Copy Raw</Button>
               <Button onClick={handleExportToWord} disabled={isModifying || slides.length === 0} className="w-full sm:w-auto"><File className="mr-2 h-4 w-4" />Word</Button>

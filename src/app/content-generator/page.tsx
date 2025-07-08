@@ -425,8 +425,8 @@ export default function ContentGeneratorPage() {
     }
   };
 
-  const handleNewCase = () => {
-    setMode('question');
+  const resetStateForNewEntry = (newMode: 'question' | 'topic') => {
+    setMode(newMode);
     setQuestion('');
     setImageFiles([]);
     setImagePreviews([]);
@@ -435,7 +435,15 @@ export default function ContentGeneratorPage() {
     setSlides(null);
     setCurrentCaseId(null);
     setStructuredQuestion(null);
+    setPresentationOutline(null);
+    setSelectedTopics([]);
+    setSuggestedTopics([]);
+    setUsedTopics([]);
     router.push('/content-generator');
+  };
+
+  const handleNewCase = () => {
+    resetStateForNewEntry('question');
   };
   
   const isQuestionSubmitDisabled = !question.trim() && imageFiles.length === 0;
@@ -480,7 +488,7 @@ export default function ContentGeneratorPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Tabs value={mode} onValueChange={(value) => setMode(value as any)} className="w-full">
+                    <Tabs value={mode} onValueChange={(value) => resetStateForNewEntry(value as 'question' | 'topic')} className="w-full">
                     <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2">
                         <TabsTrigger value="question">Specific Clinical Question</TabsTrigger>
                         <TabsTrigger value="topic">General Medical Topic</TabsTrigger>
