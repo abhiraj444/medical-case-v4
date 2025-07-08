@@ -430,10 +430,90 @@ export function SlideEditor({
       registerNotoSansRegular(doc);
       registerNotoSansBold(doc);
       registerNotoSansItalic(doc);
+      
       doc.setFont('NotoSans');
-      
-      // PDF generation logic...
-      
+
+      let yPos = 15;
+      const margin = 15;
+      const pageHeight = doc.internal.pageSize.height;
+      const contentWidth = doc.internal.pageSize.width - margin * 2;
+
+      const checkPageBreak = (neededHeight) => {
+        if (yPos + neededHeight > pageHeight - margin) {
+          doc.addPage();
+          yPos = margin;
+        }
+      };
+
+      slides.forEach((slide, slideIndex) => {
+        if (slideIndex > 0) {
+          doc.addPage();
+          yPos = margin;
+        }
+
+        doc.setFont('NotoSans', 'bold');
+        doc.setFontSize(18);
+        const titleLines = doc.splitTextToSize(slide.title, contentWidth);
+        doc.text(titleLines, margin, yPos);
+        yPos += titleLines.length * 7 + 5;
+
+        slide.content.forEach(item => {
+          doc.setFont('NotoSans', 'normal');
+          doc.setFontSize(12);
+
+          switch (item.type) {
+            case 'paragraph':
+              checkPageBreak(10);
+              const pLines = doc.splitTextToSize(item.text, contentWidth);
+              doc.text(pLines, margin, yPos);
+              yPos += pLines.length * 7 + 5;
+              break;
+            case 'bullet_list':
+              item.items.forEach(li => {
+                checkPageBreak(10);
+                doc.text(`• ${li.text}`, margin + 5, yPos);
+                yPos += 7;
+              });
+              yPos += 5;
+              break;
+            case 'numbered_list':
+              item.items.forEach((li, index) => {
+                checkPageBreak(10);
+                doc.text(`${index + 1}. ${li.text}`, margin + 5, yPos);
+                yPos += 7;
+              });
+              yPos += 5;
+              break;
+            case 'note':
+              checkPageBreak(10);
+              doc.setFont('NotoSans', 'italic');
+              const nLines = doc.splitTextToSize(`Note: ${item.text}`, contentWidth);
+              doc.text(nLines, margin, yPos);
+              yPos += nLines.length * 7 + 5;
+              break;
+            case 'table':
+              checkPageBreak(20);
+              (doc as any).autoTable({
+                startY: yPos,
+                head: [item.headers],
+                body: item.rows.map(r => r.cells),
+                theme: 'grid',
+                headStyles: {
+                  fillColor: [22, 160, 133],
+                  textColor: 255,
+                  fontStyle: 'bold',
+                },
+                styles: {
+                  font: 'NotoSans',
+                  fontStyle: 'normal',
+                },
+              });
+              yPos = (doc as any).autoTable.previous.finalY + 10;
+              break;
+          }
+        });
+      });
+
       const docName = `${topic.replace(/\s+/g, '_') || 'document'}.pdf`;
       doc.save(docName);
       toast({ title: 'PDF Downloaded', description: 'Your PDF has been downloaded.' });
