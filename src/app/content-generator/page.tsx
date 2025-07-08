@@ -255,7 +255,7 @@ export default function ContentGeneratorPage() {
   
   const handleTopicSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-     if (!user) {
+    if (!user) {
       toast({ title: "Not Authenticated", description: "You must be logged in.", variant: "destructive" });
       return;
     }
@@ -263,43 +263,54 @@ export default function ContentGeneratorPage() {
     setResult(null);
     setSlides(null);
     setStructuredQuestion(null);
+    setPresentationOutline(null);
 
     try {
+      // Directly call the outline generation API
+      const response = await fetch('/api/content-generator', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'generateOutline',
+          payload: { topic: topic.trim() }, // Pass the topic to the backend
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate outline');
+      }
+
+      const data = await response.json();
+      setPresentationOutline(data.outline);
+      setSelectedTopics(data.outline);
+
+      // Create a mock result object to display the topic
       const summaryResult = {
-          answer: `This is a general overview for the topic: **${topic}**. You can now generate a presentation outline based on this.`,
-          reasoning: '',
-          topic: topic,
+        answer: `This is a general overview for the topic: **${topic}**. You can now generate a presentation outline based on this.`,
+        reasoning: '',
+        topic: topic,
       };
       setResult(summaryResult);
 
-      const outputData = {
-        result: summaryResult,
-        slides: null,
-      };
-
       const caseId = currentCaseId || doc(collection(db, 'cases')).id;
-
-      const outputDataString = JSON.stringify(outputData);
-      const outputDataBlob = new Blob([outputDataString], { type: 'application/json' });
-      const storageRef = ref(storage, `outputs/${user.uid}/${caseId}.json`);
-      await uploadBytes(storageRef, outputDataBlob);
-      const outputDataUrl = await getDownloadURL(storageRef);
-
       const caseData = {
-          userId: user.uid,
-          type: 'content-generator' as const,
-          title: topic,
-          createdAt: serverTimestamp(),
-          inputData: {
-              mode: 'topic' as const,
-              question: null,
-              images: null,
-              topic: topic.trim() || null,
-              structuredQuestion: null,
-          },
-          outputDataUrl: outputDataUrl,
+        userId: user.uid,
+        type: 'content-generator' as const,
+        title: topic,
+        createdAt: serverTimestamp(),
+        inputData: {
+          mode: 'topic' as const,
+          question: null,
+          images: null,
+          topic: topic.trim() || null,
+          structuredQuestion: null,
+        },
+        outputDataUrl: '', // This will be updated later
       };
-      
+
       if (currentCaseId) {
         const caseRef = doc(db, 'cases', currentCaseId);
         await updateDoc(caseRef, caseData);
@@ -312,20 +323,37 @@ export default function ContentGeneratorPage() {
       }
 
     } catch (error) {
-       console.error('Topic submission failed:', error);
-       toast({
+      console.error('Topic submission failed:', error);
+      toast({
         title: 'An Error Occurred',
         description: 'Failed to process topic. Please try again.',
         variant: 'destructive',
       });
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleGenerateOutline = async () => {
-    if (!result?.topic || !user || !currentCaseId) {
-      return;
+    if (!user || !currentCaseId) return;
+
+    let payload;
+    if (mode === 'question') {
+      if (!result?.topic) return;
+      payload = {
+        action: 'generateOutline',
+        payload: {
+          question: structuredQuestion?.summary || '',
+          answer: result.answer,
+          reasoning: result.reasoning,
+        },
+      };
+    } else {
+      if (!topic) return;
+      payload = {
+        action: 'generateOutline',
+        payload: { topic: topic.trim() },
+      };
     }
 
     setIsLoading(true);
@@ -335,14 +363,7 @@ export default function ContentGeneratorPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          action: 'generateOutline',
-          payload: {
-            question: structuredQuestion?.summary || '',
-            answer: result.answer,
-            reasoning: result.reasoning,
-          },
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
       setPresentationOutline(data.outline);
@@ -489,7 +510,7 @@ export default function ContentGeneratorPage() {
                 </CardHeader>
                 <CardContent>
                     <Tabs value={mode} onValueChange={(value) => resetStateForNewEntry(value as 'question' | 'topic')} className="w-full">
-                    <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2">
+                    <TabsList className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
                         <TabsTrigger value="question">Specific Clinical Question</TabsTrigger>
                         <TabsTrigger value="topic">General Medical Topic</TabsTrigger>
                     </TabsList>
@@ -559,8 +580,8 @@ export default function ContentGeneratorPage() {
                             />
                         </div>
                         <Button type="submit" className="w-full sm:w-auto" disabled={isLoading || isTopicSubmitDisabled}>
-                            {isLoading ? <Loader2 className="animate-spin" /> : <FileText />}
-                            Set Topic
+                            {isLoading ? <Loader2 className="animate-spin" /> : <Wand2 />}
+                            Generate Presentation Outline
                         </Button>
                         </form>
                     </TabsContent>
@@ -722,7 +743,7 @@ export default function ContentGeneratorPage() {
                     }
                 }}
                 onNewCase={handleNewCase}
-                questionContext={structuredQuestion?.summary || result?.topic || ''}
+                questionContext={mode === 'topic' ? topic : structuredQuestion?.summary || result?.topic || ''}
                 outline={presentationOutline || []}
                 initialSuggestedTopics={suggestedTopics}
                 initialUsedTopics={usedTopics}
