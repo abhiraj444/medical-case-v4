@@ -74,8 +74,8 @@ import { registerNotoSansItalic } from '@/lib/pdf-fonts/NotoSansItalic';
 
 export type { Slide };
 
-const SortableItem = ({ id, children, dragHandleListeners }) => {
-  const { attributes, setNodeRef, transform, transition } = useSortable({ id });
+const SortableItem = ({ id, children }) => {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -85,7 +85,7 @@ const SortableItem = ({ id, children, dragHandleListeners }) => {
   return (
     <div ref={setNodeRef} style={style} {...attributes}>
       {React.cloneElement(children, {
-        dragHandleListeners,
+        dragHandleListeners: listeners,
       })}
     </div>
   );
@@ -557,36 +557,28 @@ export function SlideEditor({
 
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={slides.map(s => s.title)} strategy={verticalListSortingStrategy}>
-              {slides.map((slide, index) => {
-                const { attributes, listeners, setNodeRef, transform } = useSortable({ id: slide.title });
-                const style = {
-                  transform: CSS.Transform.toString(transform),
-                  transition: 'transform 0.2s ease-in-out',
-                };
-
-                return (
-                  <div key={slide.title} ref={setNodeRef} style={style} {...attributes}>
-                    <Card
-                      className="relative overflow-hidden bg-background/50 transition-all duration-300 data-[selected=true]:bg-accent/50 data-[selected=true]:ring-1 data-[selected=true]:ring-accent"
-                      data-selected={selectedIndices.includes(index)}
-                    >
-                      <CardHeader className="flex flex-row items-center justify-between p-4">
-                        <div className="flex items-center gap-3">
-                          <div {...listeners} className="cursor-grab touch-none p-2">
-                            <GripVertical className="h-5 w-5 text-muted-foreground" />
-                          </div>
-                          <Checkbox id={`select-${index}`} checked={selectedIndices.includes(index)} onCheckedChange={(checked) => handleSelectionChange(index, !!checked)} aria-label={`Select slide ${index + 1}`} />
-                          <h3 className="text-lg font-semibold">{slide.title}</h3>
+              {slides.map((slide, index) => (
+                <SortableItem key={slide.title} id={slide.title}>
+                  <Card
+                    className="relative overflow-hidden bg-background/50 transition-all duration-300 data-[selected=true]:bg-accent/50 data-[selected=true]:ring-1 data-[selected=true]:ring-accent"
+                    data-selected={selectedIndices.includes(index)}
+                  >
+                    <CardHeader className="flex flex-row items-center justify-between p-4">
+                      <div className="flex items-center gap-3">
+                        <div {...(SortableItem.dragHandleListeners || {})} className="cursor-grab touch-none p-2">
+                          <GripVertical className="h-5 w-5 text-muted-foreground" />
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => removeSlide(index)} className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
-                      </CardHeader>
-                      <CardContent className="p-4 pt-0 pl-12">
-                        {slide.content.map(renderContentItem)}
-                      </CardContent>
-                    </Card>
-                  </div>
-                );
-              })}
+                        <Checkbox id={`select-${index}`} checked={selectedIndices.includes(index)} onCheckedChange={(checked) => handleSelectionChange(index, !!checked)} aria-label={`Select slide ${index + 1}`} />
+                        <h3 className="text-lg font-semibold">{slide.title}</h3>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => removeSlide(index)} className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0 pl-12">
+                      {slide.content.map(renderContentItem)}
+                    </CardContent>
+                  </Card>
+                </SortableItem>
+              ))}
             </SortableContext>
           </DndContext>
         </CardContent>
