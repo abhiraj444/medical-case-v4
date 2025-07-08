@@ -30,7 +30,7 @@ const clinicalQuestionPrompt = ai.definePrompt({
     **Constraint Checklist & Output Format:**
     1.  **JSON Output:** The output MUST be a valid JSON object with a single key "outline" containing an array of strings (the topics).
     2.  **First Topic:** The VERY FIRST topic in the outline MUST be "Clinical Case Summary and Key Questions".
-    3.  **Advanced Content:** The subsequent 10-11 topics must be advanced and directly relevant to the case, covering aspects like differential diagnosis, at least 3 case studies, advanced diagnostics, detailed management protocols, landmark trials and recent guidelines.
+    3.  **Advanced Content:** The subsequent 10-11 topics must be advanced and directly relevant to the case, covering aspects like differential diagnosis, advanced diagnostics, detailed management protocols, landmark trials, recent guidelines, and **at least 2 distinct case studies or clinical scenarios**.
     4.  **Strict Topic Limit:** The total number of topics should be between 10 and 12.
 
     **Clinical Case Details:**

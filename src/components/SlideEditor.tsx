@@ -63,7 +63,6 @@ import {
   Type,
   PlusCircle,
   File,
-  GripVertical,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from './ui/label';
@@ -74,25 +73,7 @@ import { registerNotoSansItalic } from '@/lib/pdf-fonts/NotoSansItalic';
 
 export type { Slide };
 
-interface SortableItemProps {
-  id: string | number;
-  children: React.ReactNode;
-}
 
-const SortableItem: React.FC<SortableItemProps> = ({ id, children }) => {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      {children}
-    </div>
-  );
-};
 
 const BoldRenderer = ({ text, bold }: { text: string; bold?: string[] }) => {
   if (!text) return null;
@@ -777,17 +758,26 @@ export function SlideEditor({
 
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={slides.map(s => s.title)} strategy={verticalListSortingStrategy}>
-              {slides.map((slide, index) => (
-                <SortableItem key={slide.title} id={slide.title}>
+              {slides.map((slide, index) => {
+                const { attributes, listeners, setNodeRef, transform, transition, setActivatorNodeRef } = useSortable({ id: slide.title });
+
+                const style = {
+                  transform: CSS.Transform.toString(transform),
+                  transition,
+                };
+
+                return (
                   <Card
+                    ref={setNodeRef}
+                    style={style}
+                    {...attributes}
+                    {...listeners}
+                    key={slide.title + '-' + index}
                     className="relative overflow-hidden bg-background/50 transition-all duration-300 data-[selected=true]:bg-accent/50 data-[selected=true]:ring-1 data-[selected=true]:ring-accent"
                     data-selected={selectedIndices.includes(index)}
                   >
-                    <CardHeader className="flex flex-row items-center justify-between p-4" >
+                    <CardHeader className="flex flex-row items-center justify-between p-4 cursor-grab" >
                       <div className="flex items-center gap-3">
-                        <div {...listeners} className="cursor-grab touch-none">
-                          <GripVertical className="h-5 w-5 text-muted-foreground" />
-                        </div>
                         <Checkbox id={`select-${index}`} checked={selectedIndices.includes(index)} onCheckedChange={(checked) => handleSelectionChange(index, !!checked)} aria-label={`Select slide ${index + 1}`} />
                         <h3 className="text-lg font-semibold">{slide.title}</h3>
                       </div>
@@ -797,8 +787,8 @@ export function SlideEditor({
                       {slide.content.map(renderContentItem)}
                     </CardContent>
                   </Card>
-                </SortableItem>
-              ))}
+                );
+              })}
             </SortableContext>
           </DndContext>
         </CardContent>
