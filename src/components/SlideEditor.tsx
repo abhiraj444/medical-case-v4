@@ -63,6 +63,7 @@ import {
   Type,
   PlusCircle,
   File,
+  GripVertical,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from './ui/label';
@@ -782,8 +783,11 @@ export function SlideEditor({
                     className="relative overflow-hidden bg-background/50 transition-all duration-300 data-[selected=true]:bg-accent/50 data-[selected=true]:ring-1 data-[selected=true]:ring-accent"
                     data-selected={selectedIndices.includes(index)}
                   >
-                    <CardHeader className="flex flex-row items-center justify-between p-4 cursor-grab" >
+                    <CardHeader className="flex flex-row items-center justify-between p-4" >
                       <div className="flex items-center gap-3">
+                        <div {...listeners} className="cursor-grab touch-none">
+                          <GripVertical className="h-5 w-5 text-muted-foreground" />
+                        </div>
                         <Checkbox id={`select-${index}`} checked={selectedIndices.includes(index)} onCheckedChange={(checked) => handleSelectionChange(index, !!checked)} aria-label={`Select slide ${index + 1}`} />
                         <h3 className="text-lg font-semibold">{slide.title}</h3>
                       </div>
