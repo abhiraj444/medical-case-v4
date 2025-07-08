@@ -71,6 +71,8 @@ import { registerNotoSansRegular } from '@/lib/pdf-fonts/NotoSansRegular';
 import { registerNotoSansBold } from '@/lib/pdf-fonts/NotoSansBold';
 import { registerNotoSansItalic } from '@/lib/pdf-fonts/NotoSansItalic';
 
+export type { Slide };
+
 const BoldRenderer = ({ text, bold }: { text: string; bold?: string[] }) => {
   if (!text) return null;
   if (!bold || bold.length === 0) {
@@ -139,6 +141,20 @@ const renderContentItem = (item: ContentItem, index: number) => {
                 </ShadcnTable>
             )}
         </div>
+    </div>
+  );
+};
+
+// Add SortableItem component for dnd-kit sortable functionality
+const SortableItem = ({ id, children }: { id: string; children: React.ReactNode }) => {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {children}
     </div>
   );
 };
@@ -753,23 +769,14 @@ export function SlideEditor({
           </div>
 
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={slides.map((s, i) => s.title)} strategy={verticalListSortingStrategy}>
+            <SortableContext items={slides.map(s => s.title)} strategy={verticalListSortingStrategy}>
               {slides.map((slide, index) => (
-                <div
-                  key={slide.title}
-                  {...useSortable({ id: slide.title }).attributes}
-                  {...useSortable({ id: slide.title }).listeners}
-                  ref={useSortable({ id: slide.title }).setNodeRef}
-                  style={{
-                    transform: CSS.Transform.toString(useSortable({ id: slide.title }).transform),
-                    transition: useSortable({ id: slide.title }).transition,
-                  }}
-                >
+                <SortableItem key={slide.title} id={slide.title}>
                   <Card
-                    className="relative overflow-hidden bg-background/50 transition-all duration-300 data-[selected=true]:bg-accent/50 data-[selected=true]:ring-1 data-[selected=true]:ring-accent cursor-grab"
+                    className="relative overflow-hidden bg-background/50 transition-all duration-300 data-[selected=true]:bg-accent/50 data-[selected=true]:ring-1 data-[selected=true]:ring-accent"
                     data-selected={selectedIndices.includes(index)}
                   >
-                    <CardHeader className="flex flex-row items-center justify-between p-4" >
+                    <CardHeader className="flex flex-row items-center justify-between p-4 cursor-grab" >
                       <div className="flex items-center gap-3">
                         <Checkbox id={`select-${index}`} checked={selectedIndices.includes(index)} onCheckedChange={(checked) => handleSelectionChange(index, !!checked)} aria-label={`Select slide ${index + 1}`} />
                         <h3 className="text-lg font-semibold">{slide.title}</h3>
@@ -780,7 +787,7 @@ export function SlideEditor({
                       {slide.content.map(renderContentItem)}
                     </CardContent>
                   </Card>
-                </div>
+                </SortableItem>
               ))}
             </SortableContext>
           </DndContext>

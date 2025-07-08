@@ -289,7 +289,7 @@ export default function ContentGeneratorPage() {
 
       // Create a mock result object to display the topic
       const summaryResult = {
-        answer: `This is a general overview for the topic: **${topic}**. You can now generate a presentation outline based on this.`,
+        answer: `Following is a list of topics related to the topic, please select / deselect to generate the content for the presentation: **${topic}**. Press Generate Presentation Button to generate content from selected topics `,
         reasoning: '',
         topic: topic,
       };
