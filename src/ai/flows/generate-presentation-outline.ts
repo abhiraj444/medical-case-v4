@@ -41,21 +41,22 @@ const generalTopicPrompt = ai.definePrompt({
   input: { schema: z.object({ topic: z.string() }) },
   output: { schema: PresentationOutlineOutputSchema },
   prompt: `
-    You are an expert in medical education. Your task is to generate a comprehensive presentation outline for the given medical topic, suitable for an audience of medical professionals (MBBS, PG, MD students in India).
-    The outline should be structured logically, starting from the basics and progressing to advanced concepts. It must be detailed and cover the topic exhaustively.
+    You are an expert in medical education, tasked with creating a presentation outline for the medical topic: **{{topic}}**.
+    The audience consists of postgraduate medical professionals in India (PG, MD), so the content must be advanced, in-depth, and clinically relevant.
 
-    Medical Topic: {{topic}}
+    **Constraint Checklist & Output Format:**
+    1.  **Max 15 Topics:** The final outline MUST contain a maximum of 15 topics.
+    2.  **JSON Output:** The output MUST be a valid JSON object with a single key "outline" containing an array of strings (the topics).
+    3.  **Content Structure:** The first 3-5 topics should cover intermediate-level concepts to establish a foundation. The remaining topics (up to 10) must be advanced, focusing on postgraduate-level knowledge, recent advances, and clinical practice.
+    4.  **No Generalities:** Avoid basic or overly general topics. Focus on the complexities and nuances of the subject.
 
-    Generate a JSON object with a single key "outline" containing an array of strings. The outline should include the following sections, where applicable:
-    - Introduction / Overview of {{topic}}
-    - Epidemiology and Risk Factors
-    - Pathophysiology
-    - Clinical Manifestations and Diagnosis
-    - Diagnostic Workup (including relevant tests and imaging)
-    - Treatment and Management (including pharmacological and non-pharmacological interventions)
-    - Complications and Prognosis
-    - Recent Advances and Future Directions
-    - Case Studies / Clinical Scenarios
+    **Example Outline Structure:**
+    - Foundational Concepts (3-5 topics)
+    - Advanced Topics (up to 10 topics)
+
+    **Topic:** {{topic}}
+
+    Generate the presentation outline now, adhering strictly to all constraints.
   `,
 });
 

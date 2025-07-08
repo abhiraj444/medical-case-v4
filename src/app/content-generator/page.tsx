@@ -417,8 +417,16 @@ export default function ContentGeneratorPage() {
       }
 
       const caseData = caseSnap.data();
-      const outputDataResponse = await fetch(caseData.outputDataUrl);
-      const outputData = await outputDataResponse.json();
+      let outputData: any = {};
+
+      // For topic mode on first generation, create the output data object.
+      // For question mode, or subsequent generations, fetch existing data.
+      if (caseData.outputDataUrl) {
+        const outputDataResponse = await fetch(caseData.outputDataUrl);
+        outputData = await outputDataResponse.json();
+      } else {
+        outputData = { result };
+      }
 
       outputData.slides = generatedSlides;
       outputData.outline = presentationOutline;

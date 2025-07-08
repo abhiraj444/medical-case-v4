@@ -116,12 +116,15 @@ const prompt = ai.definePrompt({
     *   Fill each slide with substantial information. Use tables frequently to compare/contrast concepts or summarize data.
     *   Do **NOT** include a "Conclusion" or "Summary" slide unless it is explicitly requested as a topic.
 
-**Formatting Rules:**
+**Formatting & Table Rules:**
 Format the entire output as a JSON array of slide objects. Each slide object must conform to the following rules:
 1.  **Slide Object**: Each slide is an object with a "title" (string) and a "content" (array of content items). The title must exactly match the topic from the input list, except for the special "Case Presentation" title.
-2.  **Content Breakdown**: Deconstruct complex topics into multiple small, distinct points. Use \`bullet_list\` or \`numbered_list\` extensively. Each item in a list should be concise. Avoid long paragraphs; use lists to convey information concisely. For each slide, aim for a maximum of 6-8 distinct points (bullets, list items, or table rows) to ensure clarity and readability.
+2.  **Content Breakdown**: Deconstruct complex topics into multiple small, distinct points. Use 'bullet_list' or 'numbered_list' extensively. Each item in a list should be concise. Avoid long paragraphs; use lists to convey information concisely. For each slide, aim for a maximum of 6-8 distinct points (bullets, list items, or table rows) to ensure clarity and readability.
 3.  **Content Array**: The "content" array contains different types of content objects. Do NOT put too much content on a single slide; create more slides if a topic is complex. Each content item must be an object with a "type" field.
-4.  **Bolding**: For "paragraph" and list "items", use the \`bold\` array to specify substrings of the \`text\` that should be bolded. **Do NOT use markdown like \`**text**\` inside any text fields.**
+4.  **Bolding**: For "paragraph" and list "items", use the 'bold' array to specify substrings of the 'text' that should be bolded. **Do NOT use markdown like '**text**' inside any text fields.**
+5.  **Table Rules (CRITICAL):**
+    *   When creating a "table" content item, the number of items in each 'cells' array inside 'rows' MUST be exactly equal to the number of items in the 'headers' array.
+    *   Before outputting the JSON, you MUST validate every table. If a row has a different number of cells than the header, you MUST correct it.
 
 Supported "type" values for content items:
 - **"paragraph"**: For a block of text. This should be used sparingly.
