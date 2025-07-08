@@ -710,7 +710,7 @@ export default function ContentGeneratorPage() {
                     }
                 }}
                 onNewCase={handleNewCase}
-                question={question}
+                questionContext={structuredQuestion?.summary || result?.topic || ''}
                 outline={presentationOutline || []}
             />
         )}

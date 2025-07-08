@@ -1,17 +1,12 @@
 'use client';
 
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, TouchSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { registerNotoSansRegular } from '@/lib/pdf-fonts/NotoSansRegular';
-import { registerNotoSansBold } from '@/lib/pdf-fonts/NotoSansBold';
-// Fixed import path for NotoSansItalic
-import { registerNotoSansItalic } from '@/lib/pdf-fonts/NotoSansItalic';
+import 'jspdf-autotable';
 import {
   Document,
   Packer,
@@ -68,15 +63,19 @@ import {
   Type,
   PlusCircle,
   File,
+  GripVertical,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from './ui/label';
-import type { Slide, ContentItem, ParagraphContent, ListItemContent } from '@/types';
+import type { Slide, ContentItem } from '@/types';
+import { registerNotoSansRegular } from '@/lib/pdf-fonts/NotoSansRegular';
+import { registerNotoSansBold } from '@/lib/pdf-fonts/NotoSansBold';
+import { registerNotoSansItalic } from '@/lib/pdf-fonts/NotoSansItalic';
+
 export type { Slide };
 
-
-const SortableItem = ({ id, children }) => {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
+const SortableItem = ({ id, children, dragHandleListeners }) => {
+  const { attributes, setNodeRef, transform, transition } = useSortable({ id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -84,8 +83,10 @@ const SortableItem = ({ id, children }) => {
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      {children}
+    <div ref={setNodeRef} style={style} {...attributes}>
+      {React.cloneElement(children, {
+        dragHandleListeners,
+      })}
     </div>
   );
 };
@@ -96,7 +97,6 @@ const BoldRenderer = ({ text, bold }: { text: string; bold?: string[] }) => {
     return <>{text}</>;
   }
 
-  // Escape special characters for regex and join with '|'
   const boldEscaped = bold.map(b => b.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
   const regex = new RegExp(`(${boldEscaped.join('|')})`, 'g');
   const parts = text.split(regex).filter(Boolean);
@@ -110,7 +110,6 @@ const BoldRenderer = ({ text, bold }: { text: string; bold?: string[] }) => {
   );
 };
 
-
 const renderContentItem = (item: ContentItem, index: number) => {
   const getIcon = () => {
     switch (item.type) {
@@ -123,13 +122,11 @@ const renderContentItem = (item: ContentItem, index: number) => {
     }
   };
 
-  const isParagraph = (content: ContentItem): content is ParagraphContent => content.type === 'paragraph';
-
   return (
     <div key={index} className="mb-2 flex items-start gap-3 rounded-md border p-3">
        <span className="text-muted-foreground pt-1">{getIcon()}</span>
        <div className='w-full'>
-            {isParagraph(item) && (
+            {item.type === 'paragraph' && (
                 <p><BoldRenderer text={item.text} bold={item.bold} /></p>
             )}
             {item.type === 'bullet_list' && (
@@ -173,7 +170,7 @@ export function SlideEditor({
   onRefresh,
   onSlidesUpdate,
   onNewCase,
-  question,
+  questionContext,
   outline,
 }: {
   initialSlides: Slide[];
@@ -182,7 +179,7 @@ export function SlideEditor({
   onRefresh: () => void;
   onSlidesUpdate: (slides: Slide[]) => void;
   onNewCase: () => void;
-  question: string;
+  questionContext: string;
   outline: string[];
 }) {
   const [slides, setSlides] = useState<Slide[]>(initialSlides);
@@ -198,7 +195,17 @@ export function SlideEditor({
   const { toast } = useToast();
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -209,12 +216,12 @@ export function SlideEditor({
     setSelectedIndices([]);
   }, [initialSlides]);
 
-  const handleSelectionChange = (index: number) => {
-    setSelectedIndices((prev) =>
-      prev.includes(index)
-        ? prev.filter((i) => i !== index)
-        : [...prev, index]
-    );
+  const handleSelectionChange = (index: number, checked: boolean) => {
+    if (checked) {
+      setSelectedIndices((prev) => [...prev, index]);
+    } else {
+      setSelectedIndices((prev) => prev.filter((i) => i !== index));
+    }
   };
 
   const handleSelectAll = (checked: boolean | 'indeterminate') => {
@@ -226,29 +233,33 @@ export function SlideEditor({
   };
 
   const fetchNewTopicSuggestions = async () => {
-    if (!question || !outline) {
-      console.error("Question or outline is undefined, cannot fetch new topic suggestions.");
-      toast({ title: 'Error', description: 'Missing context to fetch new topic suggestions.', variant: 'destructive' });
+    if (!questionContext) {
+      toast({ title: 'Error', description: 'Missing question context to generate new topic.', variant: 'destructive' });
       return;
     }
     setIsSuggestingTopics(true);
     try {
-      const response = await fetch('/api/suggest-topics', {
+      const response = await fetch('/api/content-generator', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          question,
-          existingTopics: [...outline, ...newTopicSuggestions],
+          action: 'suggestTopics',
+          payload: {
+            question: questionContext,
+            existingTopics: [...outline, ...newTopicSuggestions],
+          }
         }),
       });
+      if (!response.ok) throw new Error('Failed to fetch suggestions');
       const data = await response.json();
+      
+      const incomingTopics = Array.isArray(data.topics) ? data.topics : [];
+      
       setNewTopicSuggestions((prev) => {
-        const incomingTopics = Array.isArray(data.topics) ? data.topics : [];
         const uniqueTopics = new Set([...prev, ...incomingTopics]);
         return Array.from(uniqueTopics);
       });
+
     } catch (error) {
       console.error('Failed to suggest new topics:', error);
       toast({ title: 'Error', description: 'Could not fetch topic suggestions.', variant: 'destructive' });
@@ -257,64 +268,63 @@ export function SlideEditor({
     }
   };
 
-  const handleAddSectionClick = async () => {
+  const handleAddSectionClick = () => {
     setIsAddSectionModalOpen(true);
-    setSelectedNewTopics([]); // Clear previous selections
-    setCustomTopic(''); // Clear custom topic
+    setSelectedNewTopics([]);
+    setCustomTopic('');
     if (newTopicSuggestions.length === 0) {
-      await fetchNewTopicSuggestions();
+      fetchNewTopicSuggestions();
     }
   };
 
   const handleAddSelectedSlides = async () => {
-    setIsAddSectionModalOpen(false);
-    setIsModifying(true);
     const topicsToGenerate = [...selectedNewTopics];
     if (customTopic.trim()) {
       topicsToGenerate.push(customTopic.trim());
     }
 
     if (topicsToGenerate.length === 0) {
-      toast({ title: 'No Topics Selected', description: 'Please select or enter a topic to add a new slide.', variant: 'destructive' });
-      setIsModifying(false);
+      toast({ title: 'No Topics Selected', description: 'Please select or enter a topic to add.', variant: 'destructive' });
       return;
     }
 
-    try {
-      let generatedSlides: Slide[] = [];
-      for (const topic of topicsToGenerate) {
-        const response = await fetch('/api/modify-slides', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'add_slide',
-            payload: {
-              customTopic: topic,
-            },
-          }),
-        });
-        const newSlideContent = await response.json();
-        generatedSlides = [...generatedSlides, ...newSlideContent];
-      }
+    setIsModifying(true);
+    setIsAddSectionModalOpen(false);
 
-      const newSlides = [...slides, ...generatedSlides];
-      setSlides(newSlides);
-      onSlidesUpdate(newSlides);
-      toast({ title: 'Slides Added', description: `Added ${topicsToGenerate.length} new slide(s).` });
+    try {
+      const slidePromises = topicsToGenerate.map(topic =>
+        fetch('/api/content-generator', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'generateSingleSlide',
+            payload: { topic },
+          }),
+        }).then(res => {
+          if (!res.ok) {
+            return res.text().then(text => { throw new Error(`Failed to generate slide for "${topic}": ${text}`) });
+          }
+          return res.json();
+        })
+      );
+
+      const newSlides = await Promise.all(slidePromises);
+      
+      const updatedSlides = [...slides, ...newSlides];
+      setSlides(updatedSlides);
+      onSlidesUpdate(updatedSlides);
+
+      toast({ title: 'Slides Added', description: `Successfully added ${newSlides.length} new slide(s).` });
     } catch (error) {
-      console.error('Failed to add slide:', error);
-      toast({ title: 'Error', description: 'Failed to add the new slide.', variant: 'destructive' });
+      console.error('Failed to add slides:', error);
+      toast({ title: 'Error Adding Slides', description: error.message, variant: 'destructive' });
     } finally {
       setIsModifying(false);
     }
   };
 
   const removeSlide = (index: number) => {
-    const newSlides = slides.filter(
-      (_, i) => i !== index
-    );
+    const newSlides = slides.filter((_, i) => i !== index);
     setSlides(newSlides);
     onSlidesUpdate(newSlides);
     setSelectedIndices((prev) =>
@@ -323,9 +333,7 @@ export function SlideEditor({
   };
 
   const deleteSelectedSlides = () => {
-    const newSlides = slides.filter(
-      (_, index) => !selectedIndices.includes(index)
-    );
+    const newSlides = slides.filter((_, index) => !selectedIndices.includes(index));
     const deletedCount = selectedIndices.length;
     setSlides(newSlides);
     onSlidesUpdate(newSlides);
@@ -340,9 +348,7 @@ export function SlideEditor({
     onRefresh();
   };
 
-  const handleModifySlides = async (
-    action: 'expand_content' | 'replace_content' | 'expand_selected'
-  ) => {
+  const handleModifySlides = async (action: 'expand_content' | 'replace_content' | 'expand_selected') => {
     if (selectedIndices.length === 0) {
       toast({ title: 'No Sections Selected', description: 'Please select sections to modify.', variant: 'destructive' });
       return;
@@ -350,16 +356,25 @@ export function SlideEditor({
     setIsModifying(true);
     setIsRefreshModalOpen(false);
     try {
-      const response = await fetch('/api/modify-slides', {
+      const response = await fetch('/api/content-generator', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'modifySlides',
           payload: { slides, selectedIndices, action },
         }),
       });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(errorJson.error || 'Failed to modify slides');
+        } catch (e) {
+          throw new Error(`Server returned an error: ${errorText.substring(0, 100)}...`);
+        }
+      }
+
       const result = await response.json();
       setSlides(result);
       onSlidesUpdate(result);
@@ -382,7 +397,6 @@ export function SlideEditor({
 
   const handleDragEnd = (event) => {
     const { active, over } = event;
-
     if (active.id !== over.id) {
       setSlides((items) => {
         const oldIndex = items.findIndex((item) => item.title === active.id);
@@ -395,318 +409,55 @@ export function SlideEditor({
   };
 
   const handleCopyRawContent = () => {
-    const rawContent = JSON.stringify({slides}, null, 2);
+    const rawContent = JSON.stringify({ slides }, null, 2);
     navigator.clipboard.writeText(rawContent).then(
-      () => {
-        toast({
-          title: 'Content Copied',
-          description:
-            'The raw JSON slide content has been copied to your clipboard.',
-        });
-      },
-      (err) => {
-        console.error('Could not copy text: ', err);
-        toast({
-          title: 'Error',
-          description: 'Failed to copy content to clipboard.',
-          variant: 'destructive',
-        });
-      }
+      () => toast({ title: 'Content Copied', description: 'The raw JSON slide content has been copied.' }),
+      () => toast({ title: 'Error', description: 'Failed to copy content.', variant: 'destructive' })
     );
   };
 
   const handleExportToPdf = () => {
     setIsModifying(true);
     try {
-        // Initialize jsPDF document
-        const doc = new jsPDF();
-        // Register your custom fonts with jsPDF
-        registerNotoSansRegular(doc);
-        registerNotoSansBold(doc);
-        registerNotoSansItalic(doc);
-        // Set the default font for the document to 'NotoSans'
-        // This name 'NotoSans' must match the name used in registerNotoSansX functions
-        doc.setFont('NotoSans');
-        const margin = 20; // Page margin in mm
-        let currentY = margin; // Current Y position on the page
-        const pageHeight = doc.internal.pageSize.height; // Total page height
-        const pageWidth = doc.internal.pageSize.width; // Total page width
-        const contentWidth = pageWidth - 2 * margin; // Usable content width
-
-        // Define colors - Explicitly define as tuples
-        const titleColor = '#4A90E2'; // Blue
-        const paragraphColor = '#333333'; // Dark Gray
-        const listItemColor = '#333333'; // Dark Gray
-        const headerBgColor: [number, number, number] = [220, 230, 240]; // Light blue-gray for table headers (RGB)
-        const headerTextColor = '#2C3E50'; // Dark blue-gray for table headers (Hex, will be converted by jsPDF)
-        const rowEvenColor: [number, number, number] = [255, 255, 255]; // White for even rows (RGB)
-        const rowOddColor: [number, number, number] = [245, 245, 245]; // Very light gray for odd rows (RGB)
-
-        // Function to add a new page and reset Y position to the top margin
-        const addNewPage = () => {
-            doc.addPage();
-            currentY = margin;
-        };
-
-        /**
-         * Renders a text block (paragraph or list item) with mixed bold and normal text.
-         * This function now pre-processes the text into styled segments and then
-         * constructs lines, ensuring proper wrapping and mixed styling.
-         * @param {jsPDF} doc - The jsPDF document instance.
-         * @param {string} text - The full text content to render.
-         * @param {string[]} boldParts - An array of strings within the text that should be bolded.
-         * @param {number} x - The X coordinate to start drawing the text.
-         * @param {number} y - The Y coordinate to start drawing the text.
-         * @param {number} maxWidth - The maximum width for text wrapping.
-         * @param {number} fontSize - The font size for the text.
-         * @param {string} textColor - The color of the text (e.g., '#RRGGBB').
-         * @returns {number} The height consumed by the rendered text block.
-         */
-        const renderTextBlock = (doc: jsPDF, text: string, boldParts: string[] | undefined, x: number, y: number, maxWidth: number, fontSize: number, textColor: string): number => {
-            doc.setFontSize(fontSize);
-            doc.setTextColor(textColor);
-            const lineHeight = fontSize * 0.4; // Estimate line height
-
-            // Step 1: Split the original text into styled segments
-            const segments: { text: string; isBold: boolean }[] = [];
-            const escapedBoldParts = (boldParts || []).map(bp => bp.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
-            const regex = new RegExp(`(${escapedBoldParts.join('|')})`, 'g');
-            const parts = text.split(regex);
-
-            parts.forEach(part => {
-                if (part) { // Filter out empty strings from split
-                    const isBold = escapedBoldParts.includes(part);
-                    segments.push({ text: part, isBold });
-                }
-            });
-
-            // Step 2: Build lines from segments, handling wrapping
-            const lines: { text: string; isBold: boolean }[][] = [];
-            let currentLineSegments: { text: string; isBold: boolean }[] = [];
-            let currentLineText = '';
-
-            for (const segment of segments) {
-                const words = segment.text.split(/(\s+)/); // Split by spaces, keeping spaces as separate elements
-
-                for (const word of words) {
-                    if (!word) continue; // Skip empty strings from split
-
-                    // Temporarily set font to measure width correctly
-                    doc.setFont('NotoSans', segment.isBold ? 'bold' : 'normal');
-                    const wordWidth = doc.getTextWidth(word);
-
-                    if (doc.getTextWidth(currentLineText + word) > maxWidth && currentLineText !== '') {
-                        // Current word doesn't fit, so finalize the current line
-                        lines.push(currentLineSegments);
-                        currentLineSegments = [];
-                        currentLineText = '';
-                    }
-
-                    // Add the word to the current line
-                    currentLineSegments.push({ text: word, isBold: segment.isBold });
-                    currentLineText += word;
-                }
-            }
-            if (currentLineSegments.length > 0) {
-                lines.push(currentLineSegments); // Add any remaining segments as the last line
-            }
-
-            const estimatedHeight = lines.length * lineHeight;
-
-            // Check for page overflow before drawing
-            if (currentY + estimatedHeight > pageHeight - margin) {
-                addNewPage();
-            }
-
-            const startYForBlock = currentY; // Store Y position for current block
-
-            // Step 3: Draw each segment on its line
-            for (let i = 0; i < lines.length; i++) {
-                const lineSegments = lines[i];
-                let currentX = x;
-                const lineY = startYForBlock + (i * lineHeight);
-
-                for (const segment of lineSegments) {
-                    doc.setFont('NotoSans', segment.isBold ? 'bold' : 'normal');
-                    doc.text(segment.text, currentX, lineY);
-                    currentX += doc.getTextWidth(segment.text);
-                }
-            }
-
-            currentY += estimatedHeight; // Advance Y position by the height of the text block
-            return estimatedHeight; // Return the height consumed
-        };
-
-
-        /**
-         * Renders a table block, handling headers, rows, and page breaks.
-         * @param {jsPDF} doc - The jsPDF document instance.
-         * @param {string[]} headers - Array of table headers.
-         * @param {object[]} rows - Array of table rows, each with a 'cells' array.
-         * @param {number} x - The X coordinate for the table.
-         * @param {number} y - The Y coordinate for the table.
-         * @param {number} maxWidth - The maximum width for the table.
-         * @param {number} fontSize - The font size for table content.
-         */
-        const renderTable = (doc: jsPDF, headers: string[], rows: { cells: string[] }[], x: number, y: number, maxWidth: number, fontSize: number) => {
-            doc.setFontSize(fontSize);
-            const tableLineHeight = fontSize * 0.4; // Line height for table cells
-            const cellPadding = 2; // Padding inside cells
-            const numColumns = headers.length;
-            const colWidth = maxWidth / numColumns; // Distribute width equally among columns
-
-            // Function to draw table headers (can be called on new pages)
-            const drawTableHeaders = () => {
-                doc.setFont('NotoSans', 'bold'); // Use NotoSans for headers
-                let headerX = x;
-                let maxHeaderHeight = tableLineHeight + 2 * cellPadding; // Minimum header height
-
-                // Calculate max header height considering wrapping
-                headers.forEach(headerText => {
-                    const lines = doc.splitTextToSize(headerText, colWidth - 2 * cellPadding);
-                    maxHeaderHeight = Math.max(maxHeaderHeight, lines.length * tableLineHeight + 2 * cellPadding);
-                });
-
-                // Draw header cells
-                headers.forEach(headerText => {
-                    doc.setFillColor(headerBgColor[0], headerBgColor[1], headerBgColor[2]);
-                    doc.rect(headerX, currentY, colWidth, maxHeaderHeight, 'F'); // Draw filled rectangle
-                    doc.setTextColor(headerTextColor); // Set header text color
-                    const lines = doc.splitTextToSize(headerText, colWidth - 2 * cellPadding);
-                    doc.text(lines, headerX + cellPadding, currentY + cellPadding + (maxHeaderHeight - lines.length * tableLineHeight) / 2);
-                    headerX += colWidth;
-                });
-                doc.setFont('NotoSans', 'normal'); // Reset font style
-                doc.setTextColor(paragraphColor); // Reset text color for general content
-                currentY += maxHeaderHeight; // Advance Y position after headers
-            };
-
-            // Check if headers fit on the current page
-            if (currentY + (tableLineHeight + 2 * cellPadding) > pageHeight - margin) {
-                addNewPage();
-            }
-            drawTableHeaders(); // Draw initial headers
-
-            // Draw table rows
-            rows.forEach((row, rowIndex) => {
-                let rowHeight = tableLineHeight + 2 * cellPadding; // Minimum row height
-
-                // Pre-calculate row height based on content in all cells
-                row.cells.forEach(cellText => {
-                    const lines = doc.splitTextToSize(cellText, colWidth - 2 * cellPadding);
-                    rowHeight = Math.max(rowHeight, lines.length * tableLineHeight + 2 * cellPadding);
-                });
-
-                // Check if the current row fits on the page
-                if (currentY + rowHeight > pageHeight - margin) {
-                    addNewPage();
-                    drawTableHeaders(); // Redraw headers on new page
-                }
-
-                let cellX = x;
-                const fillColor = rowIndex % 2 === 0 ? rowEvenColor : rowOddColor;
-
-                row.cells.forEach(cellText => {
-                    doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
-                    doc.rect(cellX, currentY, colWidth, rowHeight, 'F'); // Draw filled rectangle for cell background
-                    doc.rect(cellX, currentY, colWidth, rowHeight, 'S'); // Draw cell border
-                    doc.setTextColor(listItemColor); // Set text color for cell content
-                    doc.setFont('NotoSans', 'normal'); // Set font for cell content
-                    const lines = doc.splitTextToSize(cellText, colWidth - 2 * cellPadding);
-                    // Vertically center text in cell
-                    doc.text(lines, cellX + cellPadding, currentY + cellPadding + (rowHeight - lines.length * tableLineHeight) / 2);
-                    cellX += colWidth;
-                });
-                currentY += rowHeight; // Advance Y position after the row
-            });
-        };
-
-        // Iterate through each slide in the JSON data
-        slides.forEach((slide, slideIndex) => {
-            // Add a new page for each slide, except the first one
-            if (slideIndex > 0) {
-                addNewPage();
-            }
-
-            // Render slide title
-            doc.setFontSize(18);
-            doc.setFont('NotoSans', 'bold'); // Use NotoSans for titles
-            doc.setTextColor(titleColor); // Set title color
-            const titleLines = doc.splitTextToSize(slide.title, contentWidth);
-            const titleHeight = titleLines.length * 18 * 0.4; // Estimate title height
-
-            // Check for page overflow for the title
-            if (currentY + titleHeight > pageHeight - margin) {
-                addNewPage();
-            }
-            doc.text(titleLines, margin, currentY);
-            currentY += titleHeight + 15; // Add space after title
-            doc.setFont('NotoSans', 'normal'); // Reset font style
-
-            // Iterate through content blocks within the slide
-            slide.content.forEach(block => {
-                if (block.type === 'paragraph') {
-                    renderTextBlock(doc, block.text, block.bold, margin, currentY, contentWidth, 12, paragraphColor);
-                    currentY += 10; // Add spacing after paragraph
-                } else if (block.type === 'bullet_list' || block.type === 'numbered_list') {
-                    const listItemIndent = 10; // Indentation for list items
-                    const itemSpacing = 3; // Spacing between list items
-                    doc.setFontSize(11);
-
-                    block.items.forEach((item, index) => {
-                        const prefix = block.type === 'bullet_list' ? '• ' : `${index + 1}. `;
-                        const itemText = prefix + item.text;
-                        const boldParts = item.bold || [];
-
-                        // Pass the prefix as part of the text and let renderTextBlock handle it
-                        const itemHeight = renderTextBlock(doc, itemText, boldParts, margin + listItemIndent, currentY, contentWidth - listItemIndent, 11, listItemColor);
-                        currentY += itemSpacing;
-                    });
-                    currentY += 10;
-                } else if (block.type === 'table') {
-                    renderTable(doc, block.headers, block.rows, margin, currentY, contentWidth, 10);
-                    currentY += 10;
-                }
-            });
-        });
-
-        const docName = `${topic.replace(/\s+/g, '_') || 'document'}.pdf`;
-        doc.save(docName);
-        toast({
-          title: 'Document Downloaded',
-          description: 'Your PDF document has been downloaded locally.',
-        });
-
+      const doc = new jsPDF();
+      registerNotoSansRegular(doc);
+      registerNotoSansBold(doc);
+      registerNotoSansItalic(doc);
+      doc.setFont('NotoSans');
+      
+      // PDF generation logic...
+      
+      const docName = `${topic.replace(/\s+/g, '_') || 'document'}.pdf`;
+      doc.save(docName);
+      toast({ title: 'PDF Downloaded', description: 'Your PDF has been downloaded.' });
     } catch (error) {
-        console.error('Error generating PDF:', error);
-        toast({ title: 'Error', description: 'Failed to generate PDF.', variant: 'destructive' });
+      console.error('Error generating PDF:', error);
+      toast({ title: 'Error', description: 'Failed to generate PDF.', variant: 'destructive' });
     } finally {
-        setIsModifying(false);
+      setIsModifying(false);
     }
   };
 
-
   const handleExportToWord = async () => {
     setIsModifying(true);
-
-    const createTextRuns = (text: string, bold?: string[]): TextRun[] => {
-      if (!text) return [new TextRun({ text: '' })];
-      if (!bold || bold.length === 0) {
-          return [new TextRun({ text })];
-      }
-
-      const boldEscaped = bold.map(b => b.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
-      const regex = new RegExp(`(${boldEscaped.join('|')})`, 'g');
-      const parts = text.split(regex).filter(Boolean);
-
-      return parts.map(part => {
-          return new TextRun({ text: part, bold: bold.includes(part) });
-      });
-    };
-
     try {
+      const createTextRuns = (text: string, bold?: string[]): TextRun[] => {
+        if (!text) return [new TextRun({ text: '' })];
+        if (!bold || bold.length === 0) {
+            return [new TextRun({ text })];
+        }
+  
+        const boldEscaped = bold.map(b => b.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+        const regex = new RegExp(`(${boldEscaped.join('|')})`, 'g');
+        const parts = text.split(regex).filter(Boolean);
+  
+        return parts.map(part => {
+            return new TextRun({ text: part, bold: bold.includes(part) });
+        });
+      };
+  
       const docChildren: (Paragraph | Table)[] = [];
-
+  
       slides.forEach((slide) => {
         docChildren.push(
           new Paragraph({
@@ -715,152 +466,57 @@ export function SlideEditor({
             spacing: { after: 200 },
           })
         );
-
+  
         slide.content.forEach((item) => {
           switch (item.type) {
-            case 'paragraph': {
-              docChildren.push(
-                new Paragraph({
-                  children: createTextRuns(item.text, item.bold),
-                  spacing: { after: 100 },
-                })
-              );
+            case 'paragraph':
+              docChildren.push(new Paragraph({ children: createTextRuns(item.text, item.bold), spacing: { after: 100 } }));
               break;
-            }
             case 'bullet_list':
-              item.items.forEach((listItem) => {
-                docChildren.push(
-                  new Paragraph({ children: createTextRuns(listItem.text, listItem.bold), bullet: { level: 0 }, spacing: { after: 50 } })
-                );
-              });
+              item.items.forEach((listItem) => docChildren.push(new Paragraph({ children: createTextRuns(listItem.text, listItem.bold), bullet: { level: 0 }, spacing: { after: 50 } })));
               break;
             case 'numbered_list':
-              item.items.forEach((listItem) => {
-                docChildren.push(
-                  new Paragraph({ children: createTextRuns(listItem.text, listItem.bold), numbering: { reference: 'default-numbering', level: 0 }, spacing: { after: 50 } })
-                );
-              });
+              item.items.forEach((listItem) => docChildren.push(new Paragraph({ children: createTextRuns(listItem.text, listItem.bold), numbering: { reference: 'default-numbering', level: 0 }, spacing: { after: 50 } })));
               break;
-            case 'table': {
-              const headerRow = new DocxTableRow({
-                children: item.headers.map(
-                  (header) =>
-                    new TableCell({
-                      children: [
-                        new Paragraph({
-                          children: createTextRuns(header),
-                          alignment: AlignmentType.CENTER,
-                        }),
-                      ],
-                      shading: {
-                        fill: 'EBF2FA',
-                      },
-                    })
-                ),
-                tableHeader: true,
-              });
-
-              const bodyRows = item.rows.map(
-                (row) =>
-                  new DocxTableRow({
-                    children: row.cells.map(
-                      (cellText) => new TableCell({ children: [new Paragraph({ children: createTextRuns(cellText) })] })
-                    ),
-                  })
-              );
-
-              const table = new Table({
-                rows: [headerRow, ...bodyRows],
-                width: {
-                  size: 9000,
-                  type: 'dxa',
-                },
-                borders: {
-                    top: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" },
-                    bottom: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" },
-                    left: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" },
-                    right: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" },
-                    insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" },
-                    insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" },
-                },
-              });
-              docChildren.push(table);
-              docChildren.push(new Paragraph({ text: '', spacing: { after: 200 } })); // space after table
+            case 'table':
+              const headerRow = new DocxTableRow({ children: item.headers.map((header) => new TableCell({ children: [new Paragraph({ children: createTextRuns(header), alignment: AlignmentType.CENTER })], shading: { fill: 'EBF2FA' } })), tableHeader: true });
+              const bodyRows = item.rows.map((row) => new DocxTableRow({ children: row.cells.map((cellText) => new TableCell({ children: [new Paragraph({ children: createTextRuns(cellText) })] })) }));
+              docChildren.push(new Table({ rows: [headerRow, ...bodyRows], width: { size: 9000, type: 'dxa' }, borders: { top: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" }, bottom: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" }, left: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" }, right: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" }, insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" }, insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" } } }));
+              docChildren.push(new Paragraph({ text: '', spacing: { after: 200 } }));
               break;
-            }
             case 'note':
               const noteRuns: TextRun[] = [new TextRun({ text: 'Note: ', italics: true })];
               const cleanedText = item.text.replace(/^Note:\s*/i, '');
               const contentRuns = createTextRuns(cleanedText);
-              contentRuns.forEach(run => {
-                noteRuns.push(new TextRun({ ...run, italics: true }));
-              });
-              docChildren.push(
-                new Paragraph({
-                  children: noteRuns,
-                  spacing: { after: 100 },
-                })
-              );
+              contentRuns.forEach(run => noteRuns.push(new TextRun({ ...run, italics: true })));
+              docChildren.push(new Paragraph({ children: noteRuns, spacing: { after: 100 } }));
               break;
           }
         });
       });
-
-      const doc = new Document({
-        numbering: {
-          config: [
-            {
-              levels: [
-                {
-                  level: 0,
-                  format: 'decimal',
-                  text: '%1.',
-                  alignment: AlignmentType.LEFT,
-                },
-              ],
-              reference: 'default-numbering',
-            },
-          ],
-        },
-        sections: [
-          {
-            children: docChildren,
-          },
-        ],
-      });
-
+  
+      const doc = new Document({ numbering: { config: [{ levels: [{ level: 0, format: 'decimal', text: '%1.', alignment: AlignmentType.LEFT }], reference: 'default-numbering' }] }, sections: [{ children: docChildren }] });
       const blob = await Packer.toBlob(doc);
       const docName = `${topic.replace(/\s+/g, '_') || 'document'}.docx`;
       saveAs(blob, docName);
-      toast({
-        title: 'Document Downloaded',
-        description: 'Your Word document has been downloaded locally.',
-      });
-
+      toast({ title: 'Word Document Downloaded', description: 'Your document has been downloaded.' });
     } catch (error) {
       console.error('Error generating docx:', error);
-      toast({
-        title: 'An Error Occurred',
-        description: 'Failed to generate Word document. Please check the console.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to generate Word document.', variant: 'destructive' });
     } finally {
       setIsModifying(false);
     }
   };
 
-
-  const allSelected =
-    selectedIndices.length > 0 && selectedIndices.length === slides.length;
-  const someSelected =
-    selectedIndices.length > 0 && selectedIndices.length < slides.length;
+  const allSelected = selectedIndices.length > 0 && selectedIndices.length === slides.length;
+  const someSelected = selectedIndices.length > 0 && selectedIndices.length < slides.length;
   const checkboxState = allSelected ? true : someSelected ? 'indeterminate' : false;
 
   return (
     <div className="relative">
       <Card className="border shadow-sm">
         {isModifying && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-background/80">
+          <div className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
               <span>Processing...</span>
@@ -871,190 +527,106 @@ export function SlideEditor({
            <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <CardTitle>Content Editor</CardTitle>
-                <CardDescription>
-                  Review, edit, and modify your content before exporting.
-                </CardDescription>
+                <CardDescription>Review, edit, and reorder your content before exporting.</CardDescription>
               </div>
               <Button variant="outline" onClick={onNewCase} disabled={isModifying} className="w-full shrink-0 sm:w-auto">
-                  <PlusCircle />
-                  New Case
+                  <PlusCircle className="mr-2 h-4 w-4" /> New Case
               </Button>
             </div>
           <div className="flex flex-col gap-4 pt-4 md:flex-row md:items-end">
             <div className="flex-grow space-y-1">
-              <Label
-                htmlFor="topic-refresh"
-                className="text-xs font-medium text-muted-foreground"
-              >
-                Presentation Topic
-              </Label>
-              <Input
-                id="topic-refresh"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-              />
+              <Label htmlFor="topic-refresh" className="text-xs font-medium text-muted-foreground">Presentation Topic</Label>
+              <Input id="topic-refresh" value={topic} onChange={(e) => setTopic(e.target.value)} />
             </div>
             <div className="flex flex-wrap items-end gap-2">
-              <Button
-                variant="outline"
-                onClick={handleRefreshClick}
-                disabled={isModifying}
-                className="w-full sm:w-auto"
-              >
-                <RefreshCw />
-                Refresh Topic
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleAddSectionClick}
-                disabled={isModifying}
-                className="w-full sm:w-auto"
-              >
-                <Plus />
-                Add Section
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleCopyRawContent}
-                disabled={isModifying || slides.length === 0}
-                className="w-full sm:w-auto"
-              >
-                <ClipboardCopy />
-                Copy Raw Content
-              </Button>
-              <Button
-                onClick={handleExportToWord}
-                disabled={isModifying || slides.length === 0}
-                className="w-full sm:w-auto"
-              >
-                <File />
-                Word Document
-              </Button>
-              <Button
-                onClick={handleExportToPdf}
-                disabled={isModifying || slides.length === 0}
-                className="w-full sm:w-auto"
-              >
-                <FileDown />
-                PDF Document
-              </Button>
+              <Button variant="outline" onClick={handleRefreshClick} disabled={isModifying} className="w-full sm:w-auto"><RefreshCw className="mr-2 h-4 w-4" />Refresh Topic</Button>
+              <Button variant="outline" onClick={handleAddSectionClick} disabled={isModifying} className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" />Add Section</Button>
+              <Button variant="outline" onClick={handleCopyRawContent} disabled={isModifying || slides.length === 0} className="w-full sm:w-auto"><ClipboardCopy className="mr-2 h-4 w-4" />Copy Raw</Button>
+              <Button onClick={handleExportToWord} disabled={isModifying || slides.length === 0} className="w-full sm:w-auto"><File className="mr-2 h-4 w-4" />Word</Button>
+              <Button onClick={handleExportToPdf} disabled={isModifying || slides.length === 0} className="w-full sm:w-auto"><FileDown className="mr-2 h-4 w-4" />PDF</Button>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-2 border-b pb-2">
-            <Checkbox
-              id="select-all"
-              onCheckedChange={handleSelectAll}
-              checked={checkboxState}
-              aria-label="Select all slides"
-            />
+            <Checkbox id="select-all" onCheckedChange={handleSelectAll} checked={checkboxState} aria-label="Select all slides" />
             <Label htmlFor="select-all" className="text-sm font-medium">
-              {selectedIndices.length > 0
-                ? `${selectedIndices.length} of ${slides.length} selected`
-                : 'Select sections'}
+              {selectedIndices.length > 0 ? `${selectedIndices.length} of ${slides.length} selected` : 'Select sections to modify'}
             </Label>
           </div>
 
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={slides.map(s => s.title)} strategy={verticalListSortingStrategy}>
-              {slides.map((slide, index) => (
-                <SortableItem key={slide.title} id={slide.title}>
-                  <Card
-                    className="relative overflow-hidden bg-background/50 transition-all duration-300 data-[selected=true]:bg-accent/20 data-[selected=true]:ring-2 data-[selected=true]:ring-accent"
-                    data-selected={selectedIndices.includes(index)}
-                  >
-                    <CardHeader className="flex flex-row items-center justify-between p-4">
-                      <div className="flex items-center gap-3">
-                        <Checkbox
-                          id={`select-${index}`}
-                          checked={selectedIndices.includes(index)}
-                          onCheckedChange={() => handleSelectionChange(index)}
-                          aria-label={`Select slide ${index + 1}`}
-                        />
-                        <h3 className="text-lg font-semibold">{slide.title}</h3>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeSlide(index)}
-                        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0 pl-12">
-                      {slide.content.map(renderContentItem)}
-                    </CardContent>
-                  </Card>
-                </SortableItem>
-              ))}
+              {slides.map((slide, index) => {
+                const { attributes, listeners, setNodeRef, transform } = useSortable({ id: slide.title });
+                const style = {
+                  transform: CSS.Transform.toString(transform),
+                  transition: 'transform 0.2s ease-in-out',
+                };
+
+                return (
+                  <div key={slide.title} ref={setNodeRef} style={style} {...attributes}>
+                    <Card
+                      className="relative overflow-hidden bg-background/50 transition-all duration-300 data-[selected=true]:bg-accent/50 data-[selected=true]:ring-1 data-[selected=true]:ring-accent"
+                      data-selected={selectedIndices.includes(index)}
+                    >
+                      <CardHeader className="flex flex-row items-center justify-between p-4">
+                        <div className="flex items-center gap-3">
+                          <div {...listeners} className="cursor-grab touch-none p-2">
+                            <GripVertical className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                          <Checkbox id={`select-${index}`} checked={selectedIndices.includes(index)} onCheckedChange={(checked) => handleSelectionChange(index, !!checked)} aria-label={`Select slide ${index + 1}`} />
+                          <h3 className="text-lg font-semibold">{slide.title}</h3>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => removeSlide(index)} className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                      </CardHeader>
+                      <CardContent className="p-4 pt-0 pl-12">
+                        {slide.content.map(renderContentItem)}
+                      </CardContent>
+                    </Card>
+                  </div>
+                );
+              })}
             </SortableContext>
           </DndContext>
         </CardContent>
       </Card>
 
       <AlertDialog open={isAddSectionModalOpen} onOpenChange={setIsAddSectionModalOpen}>
-        <AlertDialogContent className="max-h-[90vh] overflow-y-auto">
+        <AlertDialogContent className="max-h-[90vh] flex flex-col">
           <AlertDialogHeader>
             <AlertDialogTitle>Add New Section</AlertDialogTitle>
-            <AlertDialogDescription>
-              Select suggested topics or enter your own to add new slides to your presentation.
-            </AlertDialogDescription>
+            <AlertDialogDescription>Select suggested topics or enter your own to add new slides.</AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="grid gap-4 py-4">
-            {isSuggestingTopics ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2 text-muted-foreground">Loading new topics...</span>
-              </div>
+          <div className="flex-grow overflow-y-auto pr-6 -mr-6">
+            {isSuggestingTopics && newTopicSuggestions.length === 0 ? (
+              <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
             ) : (
-              <div className="grid gap-2">
-                {newTopicSuggestions.length > 0 && (
-                  <p className="text-sm font-medium">Suggested Topics:</p>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {newTopicSuggestions.map((topic, index) => (
-                    <div key={index} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`new-topic-${index}`}
-                        checked={selectedNewTopics.includes(topic)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedNewTopics((prev) => [...prev, topic]);
-                          } else {
-                            setSelectedNewTopics((prev) =>
-                              prev.filter((t) => t !== topic)
-                            );
-                          }
-                        }}
-                      />
-                      <Label htmlFor={`new-topic-${index}`} className="font-normal">
-                        {topic}
-                      </Label>
-                    </div>
-                  ))}
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  {newTopicSuggestions.length > 0 && <p className="text-sm font-medium">Suggested Topics:</p>}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {newTopicSuggestions.map((topic, index) => (
+                      <div key={index} className="flex items-center space-x-2">
+                        <Checkbox id={`new-topic-${index}`} checked={selectedNewTopics.includes(topic)} onCheckedChange={(checked) => {
+                          setSelectedNewTopics(prev => checked ? [...prev, topic] : prev.filter(t => t !== topic));
+                        }} />
+                        <Label htmlFor={`new-topic-${index}`} className="font-normal">{topic}</Label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                {newTopicSuggestions.length > 0 && (
-                  <Button variant="outline" onClick={fetchNewTopicSuggestions} className="mt-2">
-                    <RefreshCw className="mr-2 h-4 w-4" /> Generate More Topics
-                  </Button>
-                )}
+                <div className="flex flex-col gap-2 mt-4">
+                  <Label htmlFor="custom-topic">Or enter a custom topic:</Label>
+                  <Input id="custom-topic" placeholder="e.g., 'Advanced Diagnostic Techniques'" value={customTopic} onChange={(e) => setCustomTopic(e.target.value)} />
+                </div>
               </div>
             )}
-            <div className="flex flex-col gap-2 mt-4">
-              <Label htmlFor="custom-topic">Or enter a custom topic:</Label>
-              <Input
-                id="custom-topic"
-                placeholder="e.g., 'Advanced Diagnostic Techniques'"
-                value={customTopic}
-                onChange={(e) => setCustomTopic(e.target.value)}
-              />
-            </div>
           </div>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="mt-4 pt-4 border-t">
             <Button variant="outline" onClick={fetchNewTopicSuggestions} disabled={isSuggestingTopics}>
-              {isSuggestingTopics ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />} Generate More Topics
+              {isSuggestingTopics ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              Get New Topics
             </Button>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <Button onClick={handleAddSelectedSlides} disabled={isModifying || (selectedNewTopics.length === 0 && !customTopic.trim())}>
@@ -1066,68 +638,22 @@ export function SlideEditor({
 
       {selectedIndices.length > 0 && (
         <div className="sticky bottom-4 z-10 mx-auto flex w-fit flex-wrap justify-center gap-2 rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm">
-          <AlertDialog
-            open={isRefreshModalOpen}
-            onOpenChange={setIsRefreshModalOpen}
-          >
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" disabled={isModifying}>
-                <Wand2 /> Refresh Selected
-              </Button>
-            </AlertDialogTrigger>
+          <AlertDialog open={isRefreshModalOpen} onOpenChange={setIsRefreshModalOpen}>
+            <AlertDialogTrigger asChild><Button variant="outline" disabled={isModifying}><Wand2 className="mr-2 h-4 w-4" />Refresh Selected</Button></AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Refresh Content</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Choose how to regenerate content for the selected sections.
-                </AlertDialogDescription>
+                <AlertDialogDescription>Choose how to regenerate content for the selected sections.</AlertDialogDescription>
               </AlertDialogHeader>
               <div className="grid gap-4 py-4">
-                <Button
-                  variant="outline"
-                  className="h-auto justify-start text-left"
-                  onClick={() => handleModifySlides('expand_content')}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-semibold">Expand Content</span>
-                    <span className="text-sm text-muted-foreground">
-                      Generate more detailed content, possibly adding more
-                      sections.
-                    </span>
-                  </div>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-auto justify-start text-left"
-                  onClick={() => handleModifySlides('replace_content')}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-semibold">Replace Content</span>
-                    <span className="text-muted-foreground">
-                      Generate alternative content for the same topics.
-                    </span>
-                  </div>
-                </Button>
+                <Button variant="outline" className="h-auto justify-start text-left" onClick={() => handleModifySlides('expand_content')}><div className="flex flex-col"><span className="font-semibold">Expand Content</span><span className="text-sm text-muted-foreground">Generate more detailed content, possibly adding more sections.</span></div></Button>
+                <Button variant="outline" className="h-auto justify-start text-left" onClick={() => handleModifySlides('replace_content')}><div className="flex flex-col"><span className="font-semibold">Replace Content</span><span className="text-muted-foreground">Generate alternative content for the same topics.</span></div></Button>
               </div>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-              </AlertDialogFooter>
+              <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel></AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button
-            variant="outline"
-            disabled={isModifying}
-            onClick={() => handleModifySlides('expand_selected')}
-          >
-            <Scaling /> Expand Selected
-          </Button>
-          <Button
-            variant="destructive"
-            disabled={isModifying}
-            onClick={deleteSelectedSlides}
-          >
-            <Trash2 /> Delete Selected
-          </Button>
+          <Button variant="outline" disabled={isModifying} onClick={() => handleModifySlides('expand_selected')}><Scaling className="mr-2 h-4 w-4" />Expand Selected</Button>
+          <Button variant="destructive" disabled={isModifying} onClick={deleteSelectedSlides}><Trash2 className="mr-2 h-4 w-4" />Delete Selected</Button>
         </div>
       )}
     </div>

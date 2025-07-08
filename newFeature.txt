@@ -19,7 +19,7 @@ While adding these all features you have to go through the prompt and click the 
 You also have to make sure that all these feature , should be implement in such that when user go to history section feature of this app , and user opened any case then generate  presentation outline section should not be present , only content editor and rest of the section should be present as earlier version. So , please also make sure , if there is need to change in firebase functionality as well to incorporate newly changes. 
 One of the most important task is to craft prompt properly and add it properly with the existing prompt. 
 
-
+Bug after first implementation.
  most of the feature is working fine except few. bug :- when contnet got generated , in        │
 │    content editor , i am not able to select individual slide by clicking on checkbox, at the top │
 │     there is called select section , after clicking on checkbox of select selection , then all   │
@@ -39,7 +39,7 @@ One of the most important task is to craft prompt properly and add it properly w
 │     showing error as failed to load the new slide , so i guess content is not getting generated  │
 │    from llm and in the console i am getting this error :- Failed to add slide : TypeError: Q is  │
 │    not iterable  
-
+Bug after second implemenation
  i think you need to fix a lot more thing , mostly prompt part and new error which is showing  │
 │    up. So , when we click on the generate presentation outline , the new feature which u just    │
 │    implemented , it is coming up with mutliple topic . But the problem is , when we click on     │
