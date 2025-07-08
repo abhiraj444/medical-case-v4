@@ -43,6 +43,8 @@ export default function ContentGeneratorPage() {
   const [slides, setSlides] = useState<Slide[] | null>(null);
   const [presentationOutline, setPresentationOutline] = useState<string[] | null>(null);
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [suggestedTopics, setSuggestedTopics] = useState<string[]>([]);
+  const [usedTopics, setUsedTopics] = useState<string[]>([]);
   const [currentCaseId, setCurrentCaseId] = useState<string | null>(null);
 
   const { toast } = useToast();
@@ -89,6 +91,8 @@ export default function ContentGeneratorPage() {
                 setResult(outputData.result || null);
                 setSlides(outputData.slides || null);
                 setPresentationOutline(outputData.outline || null);
+                setSuggestedTopics(outputData.suggestedTopics || []);
+                setUsedTopics(outputData.usedTopics || []);
               } catch (e) {
                 console.error("Failed to parse output data from storage", e);
                 toast({ title: "Error", description: "Failed to load case results from storage.", variant: 'destructive' });
@@ -712,6 +716,36 @@ export default function ContentGeneratorPage() {
                 onNewCase={handleNewCase}
                 questionContext={structuredQuestion?.summary || result?.topic || ''}
                 outline={presentationOutline || []}
+                initialSuggestedTopics={suggestedTopics}
+                initialUsedTopics={usedTopics}
+                onTopicsUpdate={async (newSuggested, newUsed) => {
+                  setSuggestedTopics(newSuggested);
+                  setUsedTopics(newUsed);
+                  if (currentCaseId && user) {
+                    try {
+                      const caseRef = doc(db, 'cases', currentCaseId);
+                      const caseSnap = await getDoc(caseRef);
+                      if (!caseSnap.exists()) return;
+
+                      const caseData = caseSnap.data();
+                      const response = await fetch(caseData.outputDataUrl);
+                      const outputData = await response.json();
+
+                      outputData.suggestedTopics = newSuggested;
+                      outputData.usedTopics = newUsed;
+
+                      const outputDataString = JSON.stringify(outputData);
+                      const outputDataBlob = new Blob([outputDataString], { type: 'application/json' });
+                      const storageRef = ref(storage, `outputs/${user.uid}/${currentCaseId}.json`);
+                      await uploadBytes(storageRef, outputDataBlob);
+                      const newOutputDataUrl = await getDownloadURL(storageRef);
+
+                      await updateDoc(caseRef, { outputDataUrl: newOutputDataUrl });
+                    } catch (e) {
+                      console.error("Failed to update topics in storage", e);
+                    }
+                  }
+                }}
             />
         )}
       </div>

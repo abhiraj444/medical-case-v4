@@ -63,7 +63,6 @@ import {
   Type,
   PlusCircle,
   File,
-  GripVertical,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from './ui/label';
@@ -83,10 +82,8 @@ const SortableItem = ({ id, children }) => {
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes}>
-      {React.cloneElement(children, {
-        dragHandleListeners: listeners,
-      })}
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {children}
     </div>
   );
 };
@@ -172,6 +169,9 @@ export function SlideEditor({
   onNewCase,
   questionContext,
   outline,
+  initialSuggestedTopics,
+  initialUsedTopics,
+  onTopicsUpdate,
 }: {
   initialSlides: Slide[];
   topic: string;
@@ -181,6 +181,9 @@ export function SlideEditor({
   onNewCase: () => void;
   questionContext: string;
   outline: string[];
+  initialSuggestedTopics: string[];
+  initialUsedTopics: string[];
+  onTopicsUpdate: (suggested: string[], used: string[]) => void;
 }) {
   const [slides, setSlides] = useState<Slide[]>(initialSlides);
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
@@ -188,7 +191,8 @@ export function SlideEditor({
   const [isModifying, setIsModifying] = useState(false);
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
   const [isAddSectionModalOpen, setIsAddSectionModalOpen] = useState(false);
-  const [newTopicSuggestions, setNewTopicSuggestions] = useState<string[]>([]);
+  const [newTopicSuggestions, setNewTopicSuggestions] = useState<string[]>(initialSuggestedTopics);
+  const [usedTopics, setUsedTopics] = useState<string[]>(initialUsedTopics);
   const [customTopic, setCustomTopic] = useState('');
   const [selectedNewTopics, setSelectedNewTopics] = useState<string[]>([]);
   const [isSuggestingTopics, setIsSuggestingTopics] = useState(false);
@@ -255,10 +259,9 @@ export function SlideEditor({
       
       const incomingTopics = Array.isArray(data.topics) ? data.topics : [];
       
-      setNewTopicSuggestions((prev) => {
-        const uniqueTopics = new Set([...prev, ...incomingTopics]);
-        return Array.from(uniqueTopics);
-      });
+      const updatedSuggestions = Array.from(new Set([...newTopicSuggestions, ...incomingTopics]));
+      setNewTopicSuggestions(updatedSuggestions);
+      onTopicsUpdate(updatedSuggestions, usedTopics);
 
     } catch (error) {
       console.error('Failed to suggest new topics:', error);
@@ -313,6 +316,10 @@ export function SlideEditor({
       const updatedSlides = [...slides, ...newSlides];
       setSlides(updatedSlides);
       onSlidesUpdate(updatedSlides);
+
+      const newUsedTopics = Array.from(new Set([...usedTopics, ...topicsToGenerate]));
+      setUsedTopics(newUsedTopics);
+      onTopicsUpdate(newTopicSuggestions, newUsedTopics);
 
       toast({ title: 'Slides Added', description: `Successfully added ${newSlides.length} new slide(s).` });
     } catch (error) {
@@ -563,11 +570,8 @@ export function SlideEditor({
                     className="relative overflow-hidden bg-background/50 transition-all duration-300 data-[selected=true]:bg-accent/50 data-[selected=true]:ring-1 data-[selected=true]:ring-accent"
                     data-selected={selectedIndices.includes(index)}
                   >
-                    <CardHeader className="flex flex-row items-center justify-between p-4">
+                    <CardHeader className="flex flex-row items-center justify-between p-4 cursor-grab" >
                       <div className="flex items-center gap-3">
-                        <div {...(SortableItem.dragHandleListeners || {})} className="cursor-grab touch-none p-2">
-                          <GripVertical className="h-5 w-5 text-muted-foreground" />
-                        </div>
                         <Checkbox id={`select-${index}`} checked={selectedIndices.includes(index)} onCheckedChange={(checked) => handleSelectionChange(index, !!checked)} aria-label={`Select slide ${index + 1}`} />
                         <h3 className="text-lg font-semibold">{slide.title}</h3>
                       </div>
@@ -600,9 +604,14 @@ export function SlideEditor({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {newTopicSuggestions.map((topic, index) => (
                       <div key={index} className="flex items-center space-x-2">
-                        <Checkbox id={`new-topic-${index}`} checked={selectedNewTopics.includes(topic)} onCheckedChange={(checked) => {
-                          setSelectedNewTopics(prev => checked ? [...prev, topic] : prev.filter(t => t !== topic));
-                        }} />
+                        <Checkbox 
+                          id={`new-topic-${index}`} 
+                          checked={selectedNewTopics.includes(topic) || usedTopics.includes(topic)} 
+                          disabled={usedTopics.includes(topic)}
+                          onCheckedChange={(checked) => {
+                            setSelectedNewTopics(prev => checked ? [...prev, topic] : prev.filter(t => t !== topic));
+                          }} 
+                        />
                         <Label htmlFor={`new-topic-${index}`} className="font-normal">{topic}</Label>
                       </div>
                     ))}
