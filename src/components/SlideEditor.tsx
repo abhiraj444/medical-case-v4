@@ -68,6 +68,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Label } from './ui/label';
 import type { Slide, ContentItem } from '@/types';
 import { registerNotoSansRegular } from '@/lib/pdf-fonts/NotoSansRegular';
+import EnhancedSlideRenderer from './EnhancedSlideRenderer';
 import { registerNotoSansBold } from '@/lib/pdf-fonts/NotoSansBold';
 import { registerNotoSansItalic } from '@/lib/pdf-fonts/NotoSansItalic';
 
@@ -290,8 +291,23 @@ export function SlideEditor({
       return;
     }
 
+    // Create placeholder slides first
+    const placeholderSlides = topicsToGenerate.map(topic => ({
+      title: topic,
+      content: [] as ContentItem[]
+    }));
+    
+    const updatedSlidesWithPlaceholders = [...slides, ...placeholderSlides];
+    setSlides(updatedSlidesWithPlaceholders);
+    onSlidesUpdate(updatedSlidesWithPlaceholders);
+    
     setIsModifying(true);
     setIsAddSectionModalOpen(false);
+    
+    // Scroll to bottom to show new placeholders
+    setTimeout(() => {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }, 100);
 
     try {
       const slidePromises = topicsToGenerate.map(topic =>
@@ -312,7 +328,14 @@ export function SlideEditor({
 
       const newSlides = await Promise.all(slidePromises);
       
-      const updatedSlides = [...slides, ...newSlides];
+      // Replace the placeholder slides with actual content
+      const updatedSlides = [...slides];
+      const startIndex = updatedSlides.length - topicsToGenerate.length;
+      
+      newSlides.forEach((slide, index) => {
+        updatedSlides[startIndex + index] = slide;
+      });
+      
       setSlides(updatedSlides);
       onSlidesUpdate(updatedSlides);
 
@@ -729,14 +752,6 @@ export function SlideEditor({
   return (
     <div className="relative">
       <Card className="border shadow-sm">
-        {isModifying && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              <span>Processing...</span>
-            </div>
-          </div>
-        )}
         <CardHeader>
            <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -768,29 +783,37 @@ export function SlideEditor({
             </Label>
           </div>
 
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={slides.map(s => s.title)} strategy={verticalListSortingStrategy}>
-              {slides.map((slide, index) => (
-                <SortableItem key={slide.title} id={slide.title}>
-                  <Card
-                    className="relative overflow-hidden bg-background/50 transition-all duration-300 data-[selected=true]:bg-accent/50 data-[selected=true]:ring-1 data-[selected=true]:ring-accent"
-                    data-selected={selectedIndices.includes(index)}
+          <div className="grid gap-6">
+            {slides.map((slide, index) => (
+              <div key={slide.title} className="relative">
+                {/* Selection Overlay */}
+                <div className="absolute top-4 left-4 z-10 flex items-center gap-3">
+                  <Checkbox 
+                    id={`select-${index}`} 
+                    checked={selectedIndices.includes(index)} 
+                    onCheckedChange={(checked) => handleSelectionChange(index, !!checked)} 
+                    aria-label={`Select slide ${index + 1}`}
+                    className="bg-white/20 border-white/40 data-[state=checked]:bg-white data-[state=checked]:text-black"
+                  />
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => removeSlide(index)} 
+                    className="h-8 w-8 bg-red-500/20 hover:bg-red-500/30 text-red-200 hover:text-white border border-red-400/30"
                   >
-                    <CardHeader className="flex flex-row items-center justify-between p-4 cursor-grab" >
-                      <div className="flex items-center gap-3">
-                        <Checkbox id={`select-${index}`} checked={selectedIndices.includes(index)} onCheckedChange={(checked) => handleSelectionChange(index, !!checked)} aria-label={`Select slide ${index + 1}`} />
-                        <h3 className="text-lg font-semibold">{slide.title}</h3>
-                      </div>
-                      <Button variant="ghost" size="icon" onClick={() => removeSlide(index)} className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0 pl-12">
-                      {slide.content.map(renderContentItem)}
-                    </CardContent>
-                  </Card>
-                </SortableItem>
-              ))}
-            </SortableContext>
-          </DndContext>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                <EnhancedSlideRenderer
+                  slide={slide}
+                  index={index}
+                  isSelected={selectedIndices.includes(index)}
+                  isLoading={false}
+                />
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 

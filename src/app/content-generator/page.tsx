@@ -338,7 +338,7 @@ export default function ContentGeneratorPage() {
     }
   };
 
-  const handleGenerateOutline = async () => {
+const handleGenerateOutline = async () => {
     if (!user || !currentCaseId) return;
 
     let payload;
@@ -384,12 +384,72 @@ export default function ContentGeneratorPage() {
     }
   };
 
-  const handleGeneratePresentation = async () => {
+const SlideSkeleton = ({ title }: { title: string }) => (
+    <div className="rounded-lg border border-dashed border-blue-200 bg-gradient-to-br from-blue-50 to-purple-50 p-6 animate-pulse shadow-sm">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-1 h-8 bg-blue-300 rounded-full"></div>
+        <div>
+          <div className="h-3 bg-blue-200 rounded w-16 mb-2"></div>
+          <div className="h-6 bg-blue-300 rounded w-48"></div>
+        </div>
+      </div>
+      <div className="space-y-3">
+        <div className="h-4 bg-blue-200 rounded w-full"></div>
+        <div className="h-4 bg-blue-200 rounded w-4/5"></div>
+        <div className="h-4 bg-blue-200 rounded w-3/5"></div>
+      </div>
+      <div className="mt-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-emerald-300 rounded-full"></div>
+          <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-emerald-300 rounded-full"></div>
+          <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+        </div>
+      </div>
+      <div className="text-sm text-blue-600 font-medium mt-4 bg-white/80 rounded px-3 py-1 w-fit">
+        Generating: {title}
+      </div>
+    </div>
+);
+
+const OutlineSkeleton = () => (
+    <div className="mt-4 rounded-lg border p-4 animate-pulse">
+      <div className="h-6 bg-gray-200 rounded w-1/2 mb-4"></div>
+      <div className="space-y-3">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="flex items-center gap-3">
+            <div className="w-4 h-4 bg-gray-200 rounded"></div>
+            <div className="h-4 bg-gray-200 rounded flex-1"></div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4">
+        <div className="h-10 bg-gray-200 rounded w-40"></div>
+      </div>
+      <div className="text-sm text-gray-500 mt-4">Generating presentation outline...</div>
+    </div>
+);
+
+const handleGeneratePresentation = async () => {
     if (!result?.topic || !user || !currentCaseId || selectedTopics.length === 0) {
       return;
     }
 
+    // Create placeholder slides first
+    const placeholderSlides = selectedTopics.map(topic => ({
+      title: topic,
+      content: []
+    }));
+    setSlides(placeholderSlides);
+    
     setIsLoading(true);
+    
+    // Scroll to show the new placeholder slides
+    setTimeout(() => {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }, 100);
     try {
       const response = await fetch('/api/content-generator', {
         method: 'POST',
@@ -679,43 +739,55 @@ export default function ContentGeneratorPage() {
                     </Accordion>
                 )}
                 
-                {!slides && !presentationOutline && (
+                {!slides && !presentationOutline && !isLoading && (
                   <div className="mt-4 flex flex-col sm:flex-row items-center gap-4 rounded-lg border p-4">
                       <Button onClick={handleGenerateOutline} disabled={isLoading} className="w-full sm:w-auto">
-                          {isLoading ? <Loader2 className="animate-spin"/> : <Wand2 />}
+                          <Wand2 />
                           Generate Presentation Outline
                       </Button>
                   </div>
                 )}
-
-                {presentationOutline && !slides && (
-                  <div className="mt-4 rounded-lg border p-4">
-                    <h3 className="text-lg font-semibold">Select Topics for Your Presentation</h3>
-                    <div className="mt-4 space-y-2">
-                      {presentationOutline.map((topic, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            id={`topic-${index}`}
-                            checked={selectedTopics.includes(topic)}
-                            onChange={() => {
-                              if (selectedTopics.includes(topic)) {
-                                setSelectedTopics(selectedTopics.filter((t) => t !== topic));
-                              } else {
-                                setSelectedTopics([...selectedTopics, topic]);
-                              }
-                            }}
-                          />
-                          <label htmlFor={`topic-${index}`}>{topic}</label>
-                        </div>
-                      ))}
-                    </div>
-                    <Button onClick={handleGeneratePresentation} disabled={isLoading || selectedTopics.length === 0} className="mt-4 w-full sm:w-auto">
-                      {isLoading ? <Loader2 className="animate-spin"/> : <Wand2 />}
-                      Generate Presentation
-                    </Button>
-                  </div>
+                
+                {isLoading && !presentationOutline && !slides && (
+                  <OutlineSkeleton />
                 )}
+
+{presentationOutline && !slides && (
+  <div className="mt-4 rounded-lg border p-4">
+    <h3 className="text-lg font-semibold">Select Topics for Your Presentation</h3>
+    <div className="mt-4 space-y-2">
+      {presentationOutline.map((topic, index) => (
+        <div key={index} className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id={`topic-${index}`}
+            checked={selectedTopics.includes(topic)}
+            onChange={() => {
+              if (selectedTopics.includes(topic)) {
+                setSelectedTopics(selectedTopics.filter((t) => t !== topic));
+              } else {
+                setSelectedTopics([...selectedTopics, topic]);
+              }
+            }}
+          />
+          <label htmlFor={`topic-${index}`}>{topic}</label>
+        </div>
+      ))}
+    </div>
+    <Button onClick={handleGeneratePresentation} disabled={isLoading || selectedTopics.length === 0} className="mt-4 w-full sm:w-auto">
+      {isLoading ? <Loader2 className="animate-spin"/> : <Wand2 />}
+      Generate Presentation
+    </Button>
+  </div>
+)}
+
+{isLoading && selectedTopics.length > 0 && (
+  <div className="mt-6 space-y-4">
+    {selectedTopics.map((topic, index) => (
+      <SlideSkeleton key={index} title={topic} />
+    ))}
+  </div>
+)}
             </CardContent>
           </Card>
         )}
