@@ -445,11 +445,6 @@ const handleGeneratePresentation = async () => {
     setSlides(placeholderSlides);
     
     setIsLoading(true);
-    
-    // Scroll to show the new placeholder slides
-    setTimeout(() => {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-    }, 100);
     try {
       const response = await fetch('/api/content-generator', {
         method: 'POST',
@@ -569,7 +564,8 @@ const handleGeneratePresentation = async () => {
   }
 
   return (
-    <div className="container mx-auto max-w-4xl px-4 pt-8 pb-4">
+    <div className="min-h-screen w-full flex flex-col">
+      <div className="container mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-8 flex-1">
       
       <div className="space-y-8">
         {!result && !isLoading && (
@@ -781,13 +777,6 @@ const handleGeneratePresentation = async () => {
   </div>
 )}
 
-{isLoading && selectedTopics.length > 0 && (
-  <div className="mt-6 space-y-4">
-    {selectedTopics.map((topic, index) => (
-      <SlideSkeleton key={index} title={topic} />
-    ))}
-  </div>
-)}
             </CardContent>
           </Card>
         )}
@@ -862,6 +851,7 @@ const handleGeneratePresentation = async () => {
             />
         )}
       </div>
+    </div>
     </div>
   );
 }

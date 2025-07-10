@@ -9,6 +9,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { SlideSchema } from '@/types/schemas';
+import type { Slide } from '@/types';
 
 const ModifySlidesInputSchema = z.object({
   slides: z.array(SlideSchema).describe('The current array of slide objects in structured JSON format.'),

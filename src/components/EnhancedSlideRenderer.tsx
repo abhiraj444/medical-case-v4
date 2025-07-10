@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useTheme } from '@/context/ThemeContext';
 import {
   Type,
   List,
@@ -27,20 +28,35 @@ import {
 } from '@/components/ui/table';
 import type { Slide, ContentItem } from '@/types';
 
-// Sophisticated gradient system for slides
-const slideGradients = [
-  'from-blue-500 via-blue-600 to-purple-700',
-  'from-emerald-400 via-teal-500 to-blue-600', 
-  'from-purple-500 via-pink-500 to-red-500',
-  'from-amber-400 via-orange-500 to-red-600',
-  'from-teal-400 via-cyan-500 to-blue-600',
-  'from-rose-400 via-pink-500 to-purple-600',
-  'from-indigo-500 via-purple-600 to-pink-600',
-  'from-cyan-400 via-blue-500 to-indigo-600',
-  'from-green-400 via-emerald-500 to-teal-600',
-  'from-orange-400 via-red-500 to-pink-600',
-  'from-violet-500 via-purple-600 to-indigo-700',
-  'from-lime-400 via-green-500 to-emerald-600'
+// Theme-aware gradient system for slides
+const lightModeGradients = [
+  'from-blue-400 via-blue-500 to-purple-600',
+  'from-emerald-300 via-teal-400 to-blue-500', 
+  'from-purple-400 via-pink-400 to-red-400',
+  'from-amber-300 via-orange-400 to-red-500',
+  'from-teal-300 via-cyan-400 to-blue-500',
+  'from-rose-300 via-pink-400 to-purple-500',
+  'from-indigo-400 via-purple-500 to-pink-500',
+  'from-cyan-300 via-blue-400 to-indigo-500',
+  'from-green-300 via-emerald-400 to-teal-500',
+  'from-orange-300 via-red-400 to-pink-500',
+  'from-violet-400 via-purple-500 to-indigo-600',
+  'from-lime-300 via-green-400 to-emerald-500'
+];
+
+const darkModeGradients = [
+  'from-blue-600 via-blue-700 to-purple-800',
+  'from-emerald-500 via-teal-600 to-blue-700', 
+  'from-purple-600 via-pink-600 to-red-600',
+  'from-amber-500 via-orange-600 to-red-700',
+  'from-teal-500 via-cyan-600 to-blue-700',
+  'from-rose-500 via-pink-600 to-purple-700',
+  'from-indigo-600 via-purple-700 to-pink-700',
+  'from-cyan-500 via-blue-600 to-indigo-700',
+  'from-green-500 via-emerald-600 to-teal-700',
+  'from-orange-500 via-red-600 to-pink-700',
+  'from-violet-600 via-purple-700 to-indigo-800',
+  'from-lime-500 via-green-600 to-emerald-700'
 ];
 
 // Medical-themed accent colors for content sections
@@ -118,14 +134,14 @@ const ContentItemRenderer: React.FC<ContentItemRendererProps> = ({ item, index, 
       animate="visible"
       className="group relative"
     >
-      <div className="relative overflow-hidden rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 hover:bg-white/15 transition-all duration-300 hover:shadow-lg hover:shadow-black/20">
+      <div className="relative overflow-hidden rounded-lg sm:rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 hover:bg-white/15 transition-all duration-300 hover:shadow-lg hover:shadow-black/20">
         
         {/* Content Type Indicator */}
-        <div className={`absolute top-3 left-3 p-2 rounded-lg ${accentClass} transition-all duration-300 group-hover:scale-110`}>
-          <IconComponent className="h-4 w-4" />
+        <div className={`absolute top-2 sm:top-3 left-2 sm:left-3 p-1.5 sm:p-2 rounded-lg ${accentClass} transition-all duration-300 group-hover:scale-110`}>
+          <IconComponent className="h-3 w-3 sm:h-4 sm:w-4" />
         </div>
 
-        <div className="pl-14 pr-4 py-4">
+        <div className="pl-10 sm:pl-14 pr-3 sm:pr-4 py-3 sm:py-4">
           {item.type === 'paragraph' && (
             <div className="prose prose-invert max-w-none">
               <p className="text-white/90 text-base leading-relaxed font-medium">
@@ -225,14 +241,22 @@ interface EnhancedSlideRendererProps {
   index: number;
   isSelected?: boolean;
   isLoading?: boolean;
+  isDissolving?: boolean;
+  onDissolveComplete?: () => void;
 }
 
 export const EnhancedSlideRenderer: React.FC<EnhancedSlideRendererProps> = ({ 
   slide, 
   index, 
   isSelected = false,
-  isLoading = false 
+  isLoading = false,
+  isDissolving = false,
+  onDissolveComplete
 }) => {
+  const { theme } = useTheme();
+  
+  const isDark = theme === 'dark';
+  const slideGradients = isDark ? darkModeGradients : lightModeGradients;
   const gradientClass = slideGradients[index % slideGradients.length];
   
   const slideVariants = {
@@ -245,6 +269,18 @@ export const EnhancedSlideRenderer: React.FC<EnhancedSlideRendererProps> = ({
         duration: 0.6,
         ease: "easeOut",
         staggerChildren: 0.1
+      }
+    }
+  };
+
+  const shimmerVariants = {
+    initial: { x: '-100%' },
+    animate: {
+      x: '100%',
+      transition: {
+        duration: 1.5,
+        repeat: Infinity,
+        ease: 'linear'
       }
     }
   };
@@ -315,37 +351,40 @@ export const EnhancedSlideRenderer: React.FC<EnhancedSlideRendererProps> = ({
     );
   }
 
+  // Check if this slide is being refreshed (has content but is loading)
+  const isRefreshing = isLoading && slide.content.length > 0;
+
   return (
     <motion.div
       variants={slideVariants}
       initial="hidden"
       animate="visible"
-      className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradientClass} shadow-2xl hover:shadow-3xl transition-all duration-500 border border-white/20 ${
-        isSelected ? 'ring-4 ring-white/40 scale-[1.02]' : ''
+      className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradientClass} shadow-2xl hover:shadow-3xl transition-all duration-500 border ${isDark ? 'border-white/10' : 'border-black/10'} ${
+        isSelected ? `ring-4 ${isDark ? 'ring-white/40' : 'ring-black/20'} scale-[1.02]` : ''
       }`}
       whileHover={{ y: -4, transition: { duration: 0.2 } }}
     >
       {/* Gradient Overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-white/10"></div>
+      <div className={`absolute inset-0 bg-gradient-to-t ${isDark ? 'from-black/30 via-transparent to-white/5' : 'from-black/10 via-transparent to-white/20'}`}></div>
       
       {/* Decorative Elements */}
       <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-16 translate-x-16"></div>
       <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full translate-y-12 -translate-x-12"></div>
       
       {/* Content Container */}
-      <div className="relative p-8 min-h-[400px]">
+      <div className="relative p-4 sm:p-6 lg:p-8 min-h-[320px] sm:min-h-[400px]">
         {/* Slide Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.5 }}
-          className="mb-8"
+          className="mb-6 sm:mb-8"
         >
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-1 h-12 bg-white/80 rounded-full shadow-sm"></div>
+            <div className="w-1 h-8 sm:h-12 bg-white/80 rounded-full shadow-sm"></div>
             <div>
-              <div className="text-white/60 text-sm font-medium mb-1">Slide {index + 1}</div>
-              <h2 className="text-2xl font-bold text-white leading-tight drop-shadow-sm">
+              <div className="text-white/60 text-xs sm:text-sm font-medium mb-1">Slide {index + 1}</div>
+              <h2 className="text-xl sm:text-2xl font-bold text-white leading-tight drop-shadow-sm break-words">
                 {slide.title}
               </h2>
             </div>
@@ -353,7 +392,7 @@ export const EnhancedSlideRenderer: React.FC<EnhancedSlideRendererProps> = ({
         </motion.div>
 
         {/* Content Items */}
-        <motion.div className="space-y-6">
+        <motion.div className="space-y-4 sm:space-y-6">
           {slide.content.map((item, contentIndex) => (
             <ContentItemRenderer
               key={contentIndex}
@@ -365,12 +404,66 @@ export const EnhancedSlideRenderer: React.FC<EnhancedSlideRendererProps> = ({
         </motion.div>
 
         {/* Slide Number Badge */}
-        <div className="absolute bottom-4 right-4">
-          <div className="bg-white/20 backdrop-blur-sm rounded-full px-3 py-1 border border-white/30">
-            <span className="text-white/80 text-sm font-medium">{index + 1}</span>
+        <div className="absolute bottom-3 sm:bottom-4 right-3 sm:right-4">
+          <div className="bg-white/20 backdrop-blur-sm rounded-full px-2 sm:px-3 py-1 border border-white/30">
+            <span className="text-white/80 text-xs sm:text-sm font-medium">{index + 1}</span>
           </div>
         </div>
       </div>
+      
+      {/* Innovative Shimmer Overlay for Refresh/Expand */}
+      {isRefreshing && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="absolute inset-0 bg-black/40 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10"
+        >
+          <div className="relative overflow-hidden w-full h-full rounded-2xl">
+            {/* Scanning Line Effect */}
+            <motion.div
+              variants={shimmerVariants}
+              initial="initial"
+              animate="animate"
+              className="absolute inset-y-0 w-1 bg-gradient-to-b from-transparent via-white to-transparent opacity-80"
+            />
+            
+            {/* Pulsing Dots */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex space-x-2">
+                {[0, 1, 2].map((i) => (
+                  <motion.div
+                    key={i}
+                    animate={{
+                      scale: [1, 1.2, 1],
+                      opacity: [0.5, 1, 0.5]
+                    }}
+                    transition={{
+                      duration: 1.5,
+                      repeat: Infinity,
+                      delay: i * 0.2
+                    }}
+                    className="w-3 h-3 bg-white rounded-full"
+                  />
+                ))}
+              </div>
+            </div>
+            
+            {/* Status Text */}
+            <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2">
+              <motion.div
+                animate={{ opacity: [0.7, 1, 0.7] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="bg-white/20 backdrop-blur-sm rounded-full px-4 py-2 border border-white/30"
+              >
+                <span className="text-white text-sm font-medium">
+                  Regenerating content...
+                </span>
+              </motion.div>
+            </div>
+          </div>
+        </motion.div>
+      )}
     </motion.div>
   );
 };

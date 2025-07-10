@@ -190,6 +190,7 @@ export function SlideEditor({
   const [topic, setTopic] = useState(initialTopic);
   const [isModifying, setIsModifying] = useState(false);
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
+  const [loadingSlides, setLoadingSlides] = useState<Set<number>>(new Set());
   const [isAddSectionModalOpen, setIsAddSectionModalOpen] = useState(false);
   const [newTopicSuggestions, setNewTopicSuggestions] = useState<string[]>(initialSuggestedTopics);
   const [usedTopics, setUsedTopics] = useState<string[]>(initialUsedTopics);
@@ -218,7 +219,17 @@ export function SlideEditor({
   useEffect(() => {
     setSlides(initialSlides);
     setSelectedIndices([]);
-  }, [initialSlides]);
+    
+    // Update used topics based on existing slides when slides change
+    if (initialSlides.length > 0) {
+      const existingTopics = initialSlides.map(slide => slide.title);
+      const updatedUsedTopics = Array.from(new Set([...initialUsedTopics, ...existingTopics]));
+      if (updatedUsedTopics.length > initialUsedTopics.length) {
+        setUsedTopics(updatedUsedTopics);
+        onTopicsUpdate(initialSuggestedTopics, updatedUsedTopics);
+      }
+    }
+  }, [initialSlides, initialUsedTopics, initialSuggestedTopics, onTopicsUpdate]);
 
   const handleSelectionChange = (index: number, checked: boolean) => {
     if (checked) {
@@ -328,16 +339,28 @@ export function SlideEditor({
 
       const newSlides = await Promise.all(slidePromises);
       
-      // Replace the placeholder slides with actual content
-      const updatedSlides = [...slides];
-      const startIndex = updatedSlides.length - topicsToGenerate.length;
-      
-      newSlides.forEach((slide, index) => {
-        updatedSlides[startIndex + index] = slide;
+      // Calculate the updated slides
+      let finalSlides: Slide[];
+      setSlides(currentSlides => {
+        const updatedSlides = [...currentSlides];
+        const startIndex = currentSlides.length - topicsToGenerate.length;
+        
+        // Replace placeholders with actual slides
+        newSlides.forEach((slide, index) => {
+          const targetIndex = startIndex + index;
+          if (targetIndex < updatedSlides.length) {
+            updatedSlides[targetIndex] = slide;
+          } else {
+            updatedSlides.push(slide);
+          }
+        });
+        
+        finalSlides = updatedSlides;
+        return updatedSlides;
       });
       
-      setSlides(updatedSlides);
-      onSlidesUpdate(updatedSlides);
+      // Update parent component with final slides
+      onSlidesUpdate(finalSlides!);
 
       const newUsedTopics = Array.from(new Set([...usedTopics, ...topicsToGenerate]));
       setUsedTopics(newUsedTopics);
@@ -388,6 +411,11 @@ export function SlideEditor({
       toast({ title: 'No Sections Selected', description: 'Please select sections to modify.', variant: 'destructive' });
       return;
     }
+    
+    // Set the selected slides as loading with shimmer effect
+    const loadingSet = new Set(selectedIndices);
+    setLoadingSlides(loadingSet);
+    
     setIsModifying(true);
     setIsRefreshModalOpen(false);
     try {
@@ -402,6 +430,7 @@ export function SlideEditor({
       
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('API Error Response:', errorText);
         try {
           const errorJson = JSON.parse(errorText);
           throw new Error(errorJson.error || 'Failed to modify slides');
@@ -411,15 +440,24 @@ export function SlideEditor({
       }
 
       const result = await response.json();
-      setSlides(result);
-      onSlidesUpdate(result);
-      setSelectedIndices([]);
-      toast({
-        title: 'Slides Updated',
-        description: 'The selected slides have been modified.',
-      });
+      console.log('Modified slides result:', result);
+      
+      if (Array.isArray(result) && result.length > 0) {
+        setSlides(result);
+        onSlidesUpdate(result);
+        setSelectedIndices([]);
+        setLoadingSlides(new Set()); // Reset loading state
+        toast({
+          title: 'Slides Updated',
+          description: 'The selected slides have been modified.',
+        });
+      } else {
+        setLoadingSlides(new Set()); // Reset loading state on error
+        throw new Error('Invalid response format from server');
+      }
     } catch (error) {
       console.error(`Slide modification failed for action: ${action}`, error);
+      setLoadingSlides(new Set()); // Reset loading state on error
       toast({
         title: 'An Error Occurred',
         description: 'Failed to modify slides. Please try again.',
@@ -787,7 +825,7 @@ export function SlideEditor({
             {slides.map((slide, index) => (
               <div key={slide.title} className="relative">
                 {/* Selection Overlay */}
-                <div className="absolute top-4 left-4 z-10 flex items-center gap-3">
+                <div className="absolute top-4 left-4 z-10">
                   <Checkbox 
                     id={`select-${index}`} 
                     checked={selectedIndices.includes(index)} 
@@ -795,11 +833,15 @@ export function SlideEditor({
                     aria-label={`Select slide ${index + 1}`}
                     className="bg-white/20 border-white/40 data-[state=checked]:bg-white data-[state=checked]:text-black"
                   />
+                </div>
+                
+                {/* Delete Button - Top Right */}
+                <div className="absolute top-4 right-4 z-10">
                   <Button 
                     variant="ghost" 
                     size="icon" 
                     onClick={() => removeSlide(index)} 
-                    className="h-8 w-8 bg-red-500/20 hover:bg-red-500/30 text-red-200 hover:text-white border border-red-400/30"
+                    className="h-8 w-8 bg-red-500/20 hover:bg-red-500/30 text-red-200 hover:text-white border border-red-400/30 transition-all duration-200"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -809,7 +851,7 @@ export function SlideEditor({
                   slide={slide}
                   index={index}
                   isSelected={selectedIndices.includes(index)}
-                  isLoading={false}
+                  isLoading={loadingSlides.has(index)}
                 />
               </div>
             ))}
@@ -832,16 +874,19 @@ export function SlideEditor({
                   {newTopicSuggestions.length > 0 && <p className="text-sm font-medium">Suggested Topics:</p>}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {newTopicSuggestions.map((topic, index) => (
-                      <div key={index} className="flex items-center space-x-2">
+                      <div key={index} className={`flex items-center space-x-2 ${(usedTopics.includes(topic) || slides.some(slide => slide.title === topic)) ? 'opacity-50' : ''}`}>
                         <Checkbox 
                           id={`new-topic-${index}`} 
-                          checked={selectedNewTopics.includes(topic) || usedTopics.includes(topic)} 
-                          disabled={usedTopics.includes(topic)}
+                          checked={selectedNewTopics.includes(topic) || usedTopics.includes(topic) || slides.some(slide => slide.title === topic)} 
+                          disabled={usedTopics.includes(topic) || slides.some(slide => slide.title === topic)}
                           onCheckedChange={(checked) => {
                             setSelectedNewTopics(prev => checked ? [...prev, topic] : prev.filter(t => t !== topic));
                           }} 
                         />
-                        <Label htmlFor={`new-topic-${index}`} className="font-normal">{topic}</Label>
+                        <Label htmlFor={`new-topic-${index}`} className={`font-normal ${(usedTopics.includes(topic) || slides.some(slide => slide.title === topic)) ? 'line-through text-muted-foreground' : ''}`}>
+                          {topic}
+                          {(usedTopics.includes(topic) || slides.some(slide => slide.title === topic)) && <span className="ml-2 text-xs text-muted-foreground">(Already used)</span>}
+                        </Label>
                       </div>
                     ))}
                   </div>
@@ -868,22 +913,33 @@ export function SlideEditor({
 
       {selectedIndices.length > 0 && (
         <div className="sticky bottom-4 z-10 mx-auto flex w-fit flex-wrap justify-center gap-2 rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm">
-          <AlertDialog open={isRefreshModalOpen} onOpenChange={setIsRefreshModalOpen}>
-            <AlertDialogTrigger asChild><Button variant="outline" disabled={isModifying}><Wand2 className="mr-2 h-4 w-4" />Refresh Selected</Button></AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Refresh Content</AlertDialogTitle>
-                <AlertDialogDescription>Choose how to regenerate content for the selected sections.</AlertDialogDescription>
-              </AlertDialogHeader>
-              <div className="grid gap-4 py-4">
-                <Button variant="outline" className="h-auto justify-start text-left" onClick={() => handleModifySlides('expand_content')}><div className="flex flex-col"><span className="font-semibold">Expand Content</span><span className="text-sm text-muted-foreground">Generate more detailed content, possibly adding more sections.</span></div></Button>
-                <Button variant="outline" className="h-auto justify-start text-left" onClick={() => handleModifySlides('replace_content')}><div className="flex flex-col"><span className="font-semibold">Replace Content</span><span className="text-sm text-muted-foreground">Generate alternative content for the same topics.</span></div></Button>
-              </div>
-              <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel></AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          <Button variant="outline" disabled={isModifying} onClick={() => handleModifySlides('expand_selected')}><Scaling className="mr-2 h-4 w-4" />Expand Selected</Button>
-          <Button variant="destructive" disabled={isModifying} onClick={deleteSelectedSlides}><Trash2 className="mr-2 h-4 w-4" />Delete Selected</Button>
+          <Button 
+            variant="outline" 
+            disabled={isModifying} 
+            onClick={() => handleModifySlides('replace_content')}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh Selected
+          </Button>
+          <Button 
+            variant="outline" 
+            disabled={isModifying} 
+            onClick={() => handleModifySlides('expand_selected')}
+            className="flex items-center gap-2"
+          >
+            <Scaling className="h-4 w-4" />
+            Expand Selected
+          </Button>
+          <Button 
+            variant="destructive" 
+            disabled={isModifying} 
+            onClick={deleteSelectedSlides}
+            className="flex items-center gap-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete Selected
+          </Button>
         </div>
       )}
     </div>
