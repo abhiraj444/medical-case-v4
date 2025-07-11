@@ -835,6 +835,32 @@ export function SlideEditor({
                   />
                 </div>
                 
+                {/* Top Action Buttons - positioned above slide title */}
+                {selectedIndices.includes(index) && (
+                  <div className="absolute top-2 left-1/2 transform -translate-x-1/2 -translate-y-2 z-20 flex space-x-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleModifySlides('replace_content')} 
+                      disabled={isModifying}
+                      className="flex items-center gap-2 text-sm bg-background/95 backdrop-blur-sm hover:bg-background/100 border border-border shadow-lg transition-all duration-200 px-3 py-2 rounded-lg hover:shadow-xl"
+                    >
+                      <RefreshCw className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <span className="font-medium text-foreground">Refresh</span>
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleModifySlides('expand_selected')} 
+                      disabled={isModifying}
+                      className="flex items-center gap-2 text-sm bg-background/95 backdrop-blur-sm hover:bg-background/100 border border-border shadow-lg transition-all duration-200 px-3 py-2 rounded-lg hover:shadow-xl"
+                    >
+                      <Scaling className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      <span className="font-medium text-foreground">Expand</span>
+                    </Button>
+                  </div>
+                )}
+                
                 {/* Delete Button - Top Right */}
                 <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10">
                   <Button 
@@ -911,37 +937,6 @@ export function SlideEditor({
         </AlertDialogContent>
       </AlertDialog>
 
-      {selectedIndices.length > 0 && (
-        <div className="sticky bottom-4 z-10 mx-auto flex w-fit flex-wrap justify-center gap-2 rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm">
-          <Button 
-            variant="outline" 
-            disabled={isModifying} 
-            onClick={() => handleModifySlides('replace_content')}
-            className="flex items-center gap-2"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh Selected
-          </Button>
-          <Button 
-            variant="outline" 
-            disabled={isModifying} 
-            onClick={() => handleModifySlides('expand_selected')}
-            className="flex items-center gap-2"
-          >
-            <Scaling className="h-4 w-4" />
-            Expand Selected
-          </Button>
-          <Button 
-            variant="destructive" 
-            disabled={isModifying} 
-            onClick={deleteSelectedSlides}
-            className="flex items-center gap-2"
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete Selected
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
