@@ -176,4 +176,38 @@ body {
     fill: hsl(var(--reasoning-foreground)) !important; /* For SVG icons */
     color: hsl(var(--reasoning-foreground)) !important; /* For font icons */
   }
+
+  /* Mobile-specific utilities for text wrapping and overflow */
+  @media (max-width: 767px) {
+    .mobile-text-wrap {
+      word-wrap: break-word;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      hyphens: auto;
+    }
+    
+    .mobile-container {
+      max-width: 100vw;
+      overflow-x: hidden;
+    }
+    
+    .mobile-slide {
+      max-width: calc(100vw - 2rem);
+      overflow: hidden;
+    }
+  }
+
+  /* Ensure proper text wrapping on all devices */
+  .text-wrap {
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+  }
+
+  /* Prevent horizontal overflow */
+  .overflow-x-hidden {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
 }

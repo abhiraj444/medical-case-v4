@@ -565,9 +565,9 @@ const handleGeneratePresentation = async () => {
 
   return (
     <div className="min-h-screen w-full flex flex-col">
-      <div className="container mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-8 flex-1">
+      <div className="container mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full max-w-full">
       
-      <div className="space-y-8">
+      <div className="space-y-8 w-full max-w-full">
         {!result && !isLoading && (
             <Card className="border shadow-sm">
                 <CardHeader>

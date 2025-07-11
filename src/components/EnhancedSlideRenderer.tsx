@@ -86,7 +86,7 @@ const BoldRenderer: React.FC<BoldRendererProps> = ({ text, bold = [], className 
   const parts = text.split(regex).filter(Boolean);
 
   return (
-    <span className={className}>
+    <span className={`${className} text-wrap mobile-text-wrap`}>
       {parts.map((part, i) =>
         bold.includes(part) ? 
           <strong key={i} className="font-bold text-white drop-shadow-sm">{part}</strong> : 
@@ -124,36 +124,36 @@ const ContentItemRenderer: React.FC<ContentItemRendererProps> = ({ item, index, 
       variants={itemVariants}
       initial="hidden"
       animate="visible"
-      className="group relative"
+      className="group relative w-full max-w-full"
     >
-      <div className="relative overflow-hidden rounded-lg sm:rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 hover:bg-white/15 transition-all duration-300 hover:shadow-lg hover:shadow-black/20">
-        
+      <div className="relative overflow-hidden rounded-lg sm:rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 hover:bg-white/15 transition-all duration-300 hover:shadow-lg hover:shadow-black/20 w-full max-w-full">  
+
         {/* Content Type Indicator */}
-        <div className={`absolute top-2 sm:top-3 left-2 sm:left-3 p-1.5 sm:p-2 rounded-lg ${accentClass} transition-all duration-300 group-hover:scale-110`}>
+        <div className={`absolute top-2 sm:top-3 left-2 sm:left-3 p-1.5 sm:p-2 rounded-lg ${accentClass} transition-all duration-300 group-hover:scale-110 flex-shrink-0`}>
           <IconComponent className="h-3 w-3 sm:h-4 sm:w-4" />
         </div>
 
-        <div className="pl-10 sm:pl-14 pr-3 sm:pr-4 py-3 sm:py-4">
+        <div className="pl-8 sm:pl-10 lg:pl-14 pr-2 sm:pr-3 lg:pr-4 py-2 sm:py-3 lg:py-4 w-full max-w-full overflow-hidden">
           {item.type === 'paragraph' && (
-            <div className="prose prose-invert max-w-none">
-              <p className="text-white/90 text-base leading-relaxed font-medium">
+            <div className="prose prose-invert max-w-none w-full">
+              <p className="text-white/90 text-sm sm:text-base leading-relaxed font-medium break-words hyphens-auto">
                 <BoldRenderer text={item.text} bold={item.bold} />
               </p>
             </div>
           )}
 
           {item.type === 'bullet_list' && (
-            <ul className="space-y-3">
+            <ul className="space-y-2 sm:space-y-3 w-full">
               {item.items.map((listItem, i) => (
                 <motion.li 
                   key={i}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: (index * 0.1) + (i * 0.05) }}
-                  className="flex items-start gap-3 text-white/90"
+                  className="flex items-start gap-2 sm:gap-3 text-white/90 w-full max-w-full"
                 >
-                  <div className="w-2 h-2 bg-emerald-400 rounded-full mt-2.5 flex-shrink-0 shadow-sm"></div>
-                  <span className="text-base leading-relaxed font-medium">
+                  <div className="w-2 h-2 bg-emerald-400 rounded-full mt-2 sm:mt-2.5 flex-shrink-0 shadow-sm"></div>
+                  <span className="text-sm sm:text-base leading-relaxed font-medium break-words hyphens-auto flex-1 min-w-0">
                     <BoldRenderer text={listItem.text} bold={listItem.bold} />
                   </span>
                 </motion.li>
@@ -162,19 +162,19 @@ const ContentItemRenderer: React.FC<ContentItemRendererProps> = ({ item, index, 
           )}
 
           {item.type === 'numbered_list' && (
-            <ol className="space-y-3">
+            <ol className="space-y-2 sm:space-y-3 w-full">
               {item.items.map((listItem, i) => (
                 <motion.li 
                   key={i}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: (index * 0.1) + (i * 0.05) }}
-                  className="flex items-start gap-3 text-white/90"
+                  className="flex items-start gap-2 sm:gap-3 text-white/90 w-full max-w-full"
                 >
-                  <div className="w-7 h-7 bg-purple-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 shadow-sm">
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 bg-purple-500 text-white rounded-full flex items-center justify-center text-xs sm:text-sm font-bold flex-shrink-0 shadow-sm">
                     {i + 1}
                   </div>
-                  <span className="text-base leading-relaxed font-medium pt-1">
+                  <span className="text-sm sm:text-base leading-relaxed font-medium pt-1 break-words hyphens-auto flex-1 min-w-0">
                     <BoldRenderer text={listItem.text} bold={listItem.bold} />
                   </span>
                 </motion.li>
@@ -183,12 +183,12 @@ const ContentItemRenderer: React.FC<ContentItemRendererProps> = ({ item, index, 
           )}
 
           {item.type === 'table' && (
-            <div className="rounded-lg overflow-hidden bg-white/5 border border-white/20">
-              <Table>
+            <div className="rounded-lg overflow-x-auto bg-white/5 border border-white/20 w-full max-w-full">
+              <Table className="min-w-full">
                 <TableHeader>
                   <TableRow className="border-white/20 bg-white/10">
                     {item.headers.map((header, i) => (
-                      <TableHead key={i} className="text-white font-bold text-sm border-white/20">
+                      <TableHead key={i} className="text-white font-bold text-xs sm:text-sm border-white/20 px-2 sm:px-4 py-2 whitespace-nowrap">
                         {header}
                       </TableHead>
                     ))}
@@ -198,7 +198,7 @@ const ContentItemRenderer: React.FC<ContentItemRendererProps> = ({ item, index, 
                   {item.rows.map((row, i) => (
                     <TableRow key={i} className="border-white/10 hover:bg-white/5">
                       {row.cells.map((cell, j) => (
-                        <TableCell key={j} className="text-white/90 text-sm border-white/10">
+                        <TableCell key={j} className="text-white/90 text-xs sm:text-sm border-white/10 px-2 sm:px-4 py-2 break-words">
                           {cell}
                         </TableCell>
                       ))}
@@ -210,11 +210,11 @@ const ContentItemRenderer: React.FC<ContentItemRendererProps> = ({ item, index, 
           )}
 
           {item.type === 'note' && (
-            <div className="relative">
-              <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-400/30 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <Info className="h-5 w-5 text-amber-300 flex-shrink-0 mt-0.5" />
-                  <p className="text-amber-100 text-sm font-medium leading-relaxed">
+            <div className="relative w-full max-w-full">
+              <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-400/30 rounded-lg p-3 sm:p-4">
+                <div className="flex items-start gap-2 sm:gap-3">
+                  <Info className="h-4 w-4 sm:h-5 sm:w-5 text-amber-300 flex-shrink-0 mt-0.5" />
+                  <p className="text-amber-100 text-xs sm:text-sm font-medium leading-relaxed break-words hyphens-auto flex-1 min-w-0">
                     <span className="font-bold">Note: </span>
                     {item.text.replace(/^Note:\s*/i, '')}
                   </p>
@@ -282,16 +282,16 @@ export const EnhancedSlideRenderer: React.FC<EnhancedSlideRendererProps> = ({
 
   if (showLoadingState) {
     return (
-      <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradientClass} shadow-2xl border border-white/20`}>
+      <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradientClass} shadow-2xl border border-white/20 w-full max-w-full mobile-slide overflow-x-hidden`}>
         <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
-        <div className="relative p-8 min-h-[400px]">
+        <div className="relative p-3 sm:p-4 lg:p-6 xl:p-8 min-h-[280px] sm:min-h-[320px] lg:min-h-[400px] w-full max-w-full overflow-hidden">
           {/* Slide Header */}
-          <div className="mb-8">
+          <div className="mb-6 sm:mb-8">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-1 h-12 bg-white/80 rounded-full shadow-sm"></div>
-              <div>
-                <div className="text-white/60 text-sm font-medium mb-1">Slide {index + 1}</div>
-                <h2 className="text-2xl font-bold text-white leading-tight drop-shadow-sm">
+              <div className="w-1 h-8 sm:h-12 bg-white/80 rounded-full shadow-sm"></div>
+              <div className="min-w-0 flex-1">
+                <div className="text-white/60 text-xs sm:text-sm font-medium mb-1">Slide {index + 1}</div>
+                <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-white leading-tight drop-shadow-sm break-words">
                   {slide.title}
                 </h2>
               </div>
@@ -353,30 +353,30 @@ export const EnhancedSlideRenderer: React.FC<EnhancedSlideRendererProps> = ({
       animate="visible"
       className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradientClass} shadow-2xl hover:shadow-3xl transition-all duration-500 border ${isDark ? 'border-white/10' : 'border-black/10'} ${
         isSelected ? `ring-4 ${isDark ? 'ring-white/40' : 'ring-black/20'} scale-[1.02]` : ''
-      }`}
+      } w-full max-w-full mobile-slide overflow-x-hidden`}
       whileHover={{ y: -4, transition: { duration: 0.2 } }}
     >
       {/* Gradient Overlay */}
       <div className={`absolute inset-0 bg-gradient-to-t ${isDark ? 'from-black/30 via-transparent to-white/5' : 'from-black/10 via-transparent to-white/20'}`}></div>
       
       {/* Decorative Elements */}
-      <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-16 translate-x-16"></div>
-      <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full translate-y-12 -translate-x-12"></div>
-      
+      <div className="absolute top-0 right-0 w-16 h-16 sm:w-32 sm:h-32 bg-white/5 rounded-full -translate-y-8 translate-x-8 sm:-translate-y-16 sm:translate-x-16"></div>
+      <div className="absolute bottom-0 left-0 w-12 h-12 sm:w-24 sm:h-24 bg-black/10 rounded-full translate-y-6 -translate-x-6 sm:translate-y-12 sm:-translate-x-12"></div>
+
       {/* Content Container */}
-      <div className="relative p-4 sm:p-6 lg:p-8 min-h-[320px] sm:min-h-[400px]">
+
+      <div className="relative p-3 sm:p-4 lg:p-6 xl:p-8 min-h-[280px] sm:min-h-[320px] lg:min-h-[400px] w-full max-w-full overflow-hidden">
         {/* Slide Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-          className="mb-6 sm:mb-8"
+          className="mb-4 sm:mb-6 lg:mb-8"
         >
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-1 h-8 sm:h-12 bg-white/80 rounded-full shadow-sm"></div>
-            <div>
+          <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+            <div className="w-1 h-6 sm:h-8 lg:h-12 bg-white/80 rounded-full shadow-sm"></div>
+            <div className="min-w-0 flex-1">
               <div className="text-white/60 text-xs sm:text-sm font-medium mb-1">Slide {index + 1}</div>
-              <h2 className="text-xl sm:text-2xl font-bold text-white leading-tight drop-shadow-sm break-words">
+              <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-white leading-tight drop-shadow-sm break-words hyphens-auto">
                 {slide.title}
               </h2>
             </div>
@@ -384,7 +384,7 @@ export const EnhancedSlideRenderer: React.FC<EnhancedSlideRendererProps> = ({
         </motion.div>
 
         {/* Content Items */}
-        <motion.div className="space-y-4 sm:space-y-6">
+        <motion.div className="space-y-3 sm:space-y-4 lg:space-y-6 w-full max-w-full">
           {slide.content.map((item, contentIndex) => (
             <ContentItemRenderer
               key={contentIndex}

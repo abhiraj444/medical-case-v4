@@ -788,11 +788,11 @@ export function SlideEditor({
   const checkboxState = allSelected ? true : someSelected ? 'indeterminate' : false;
 
   return (
-    <div className="relative">
-      <Card className="border shadow-sm">
+    <div className="relative w-full max-w-full overflow-x-hidden mobile-container">
+      <Card className="border shadow-sm w-full max-w-full overflow-x-hidden">
         <CardHeader>
            <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
+              <div className="min-w-0 flex-1">
                 <CardTitle>Content Editor</CardTitle>
                 <CardDescription>Review, edit, and reorder your content before exporting.</CardDescription>
               </div>
@@ -821,11 +821,11 @@ export function SlideEditor({
             </Label>
           </div>
 
-          <div className="grid gap-6">
+          <div className="grid gap-4 sm:gap-6 w-full max-w-full overflow-x-hidden">
             {slides.map((slide, index) => (
-              <div key={slide.title} className="relative">
+              <div key={slide.title} className="relative w-full max-w-full mobile-slide overflow-x-hidden">
                 {/* Selection Overlay */}
-                <div className="absolute top-4 left-4 z-10">
+                <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-10">
                   <Checkbox 
                     id={`select-${index}`} 
                     checked={selectedIndices.includes(index)} 
@@ -836,14 +836,14 @@ export function SlideEditor({
                 </div>
                 
                 {/* Delete Button - Top Right */}
-                <div className="absolute top-4 right-4 z-10">
+                <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10">
                   <Button 
                     variant="ghost" 
                     size="icon" 
                     onClick={() => removeSlide(index)} 
-                    className="h-8 w-8 bg-red-500/20 hover:bg-red-500/30 text-red-200 hover:text-white border border-red-400/30 transition-all duration-200"
+                    className="h-7 w-7 sm:h-8 sm:w-8 bg-red-500/20 hover:bg-red-500/30 text-red-200 hover:text-white border border-red-400/30 transition-all duration-200"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                   </Button>
                 </div>
                 
