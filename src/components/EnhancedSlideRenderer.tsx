@@ -30,33 +30,25 @@ import type { Slide, ContentItem } from '@/types';
 
 // Theme-aware gradient system for slides
 const lightModeGradients = [
-  'from-blue-400 via-blue-500 to-purple-600',
-  'from-emerald-300 via-teal-400 to-blue-500', 
-  'from-purple-400 via-pink-400 to-red-400',
-  'from-amber-300 via-orange-400 to-red-500',
-  'from-teal-300 via-cyan-400 to-blue-500',
-  'from-rose-300 via-pink-400 to-purple-500',
-  'from-indigo-400 via-purple-500 to-pink-500',
-  'from-cyan-300 via-blue-400 to-indigo-500',
-  'from-green-300 via-emerald-400 to-teal-500',
-  'from-orange-300 via-red-400 to-pink-500',
-  'from-violet-400 via-purple-500 to-indigo-600',
-  'from-lime-300 via-green-400 to-emerald-500'
+  'from-gray-900 via-gray-800 to-gray-700',            // Clean and neutral
+  'from-blue-950 via-indigo-900 to-purple-900',        // Deep cool tones
+  'from-teal-900 via-emerald-800 to-green-800',        // Muted green tones
+  'from-rose-900 via-pink-900 to-fuchsia-900',         // Elegant warm tones
+  'from-yellow-800 via-orange-900 to-amber-900',       // Warm with a hint of richness
+  'from-slate-900 via-slate-800 to-slate-700',         // Polished dark slate
+  'from-cyan-900 via-blue-900 to-sky-900',             // Deep ocean feel
+  'from-zinc-900 via-zinc-800 to-zinc-700'             // Very neutral, good for content-heavy areas
 ];
 
 const darkModeGradients = [
-  'from-blue-600 via-blue-700 to-purple-800',
-  'from-emerald-500 via-teal-600 to-blue-700', 
-  'from-purple-600 via-pink-600 to-red-600',
-  'from-amber-500 via-orange-600 to-red-700',
-  'from-teal-500 via-cyan-600 to-blue-700',
-  'from-rose-500 via-pink-600 to-purple-700',
-  'from-indigo-600 via-purple-700 to-pink-700',
-  'from-cyan-500 via-blue-600 to-indigo-700',
-  'from-green-500 via-emerald-600 to-teal-700',
-  'from-orange-500 via-red-600 to-pink-700',
-  'from-violet-600 via-purple-700 to-indigo-800',
-  'from-lime-500 via-green-600 to-emerald-700'
+  'from-gray-900 via-gray-800 to-gray-700',            // Clean and neutral
+  'from-blue-950 via-indigo-900 to-purple-900',        // Deep cool tones
+  'from-teal-900 via-emerald-800 to-green-800',        // Muted green tones
+  'from-rose-900 via-pink-900 to-fuchsia-900',         // Elegant warm tones
+  'from-yellow-800 via-orange-900 to-amber-900',       // Warm with a hint of richness
+  'from-slate-900 via-slate-800 to-slate-700',         // Polished dark slate
+  'from-cyan-900 via-blue-900 to-sky-900',             // Deep ocean feel
+  'from-zinc-900 via-zinc-800 to-zinc-700'             // Neutral dark for maximum readability
 ];
 
 // Medical-themed accent colors for content sections
