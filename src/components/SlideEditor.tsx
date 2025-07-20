@@ -67,6 +67,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Label } from './ui/label';
 import type { Slide, ContentItem } from '@/types';
+import dynamic from 'next/dynamic';
 import { registerNotoSansRegular } from '@/lib/pdf-fonts/NotoSansRegular';
 import EnhancedSlideRenderer from './EnhancedSlideRenderer';
 import { registerNotoSansBold } from '@/lib/pdf-fonts/NotoSansBold';
@@ -713,6 +714,27 @@ export function SlideEditor({
     }
   };
 
+  const handleExportToPptx = async () => {
+    setIsModifying(true);
+    try {
+      const { generatePptx } = await import('@/lib/ppt-generator');
+      const docName = `${topic.replace(/\s+/g, '_') || 'document'}.pptx`;
+      if (!virtualSlideRef.current) {
+        throw new Error("Virtual slide element not found for measurement.");
+      }
+      await generatePptx(slides, docName, virtualSlideRef.current);
+      toast({
+        title: 'Document Downloaded',
+        description: 'Your PowerPoint document has been downloaded locally.',
+      });
+    } catch (error) {
+      console.error('Error generating PPTX:', error);
+      toast({ title: 'Error', description: 'Failed to generate PowerPoint.', variant: 'destructive' });
+    } finally {
+      setIsModifying(false);
+    }
+  };
+
   const handleExportToWord = async () => {
     setIsModifying(true);
     try {
@@ -783,12 +805,28 @@ export function SlideEditor({
     }
   };
 
+  const virtualSlideRef = React.useRef<HTMLDivElement>(null);
+
   const allSelected = selectedIndices.length > 0 && selectedIndices.length === slides.length;
   const someSelected = selectedIndices.length > 0 && selectedIndices.length < slides.length;
   const checkboxState = allSelected ? true : someSelected ? 'indeterminate' : false;
 
   return (
     <div className="relative w-full max-w-full overflow-x-hidden mobile-container">
+      {/* Hidden virtual slide for height measurements - mimics codePPT.html */}
+      <div
+        id="virtual-slide"
+        ref={virtualSlideRef}
+        style={{
+          position: 'absolute',
+          top: '-9999px',
+          left: '-9999px',
+          visibility: 'hidden',
+          width: '880px', /* 960px slide width - 40px left/right padding */
+          padding: '0',
+          fontFamily: 'Inter, sans-serif',
+        }}
+      ></div>
       <Card className="border shadow-sm w-full max-w-full overflow-x-hidden">
         <CardHeader>
            <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -810,6 +848,7 @@ export function SlideEditor({
               <Button variant="outline" onClick={handleCopyRawContent} disabled={isModifying || slides.length === 0} className="w-full sm:w-auto"><ClipboardCopy className="mr-2 h-4 w-4" />Copy Raw</Button>
               <Button onClick={handleExportToWord} disabled={isModifying || slides.length === 0} className="w-full sm:w-auto"><File className="mr-2 h-4 w-4" />Word</Button>
               <Button onClick={handleExportToPdf} disabled={isModifying || slides.length === 0} className="w-full sm:w-auto"><FileDown className="mr-2 h-4 w-4" />PDF</Button>
+              <Button onClick={handleExportToPptx} disabled={isModifying || slides.length === 0} className="w-full sm:w-auto"><File className="mr-2 h-4 w-4" />PowerPoint</Button>
             </div>
           </div>
         </CardHeader>
