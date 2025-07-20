@@ -153,7 +153,7 @@ async function renderTable(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: any
             startY = MARGIN_TOP + TITLE_OPTIONS.h + 0.15;
 
             rowsForCurrentSlide = [content.headers.map((h: string) => ({ text: h, options: headerOptions }))];
-            tableHeightOnSlide = measureHeight(headerHtml) + ROW_BUFFER;
+            tableHeightOnSlide = measureHeight(headerHtml, virtualSlideElement) + ROW_BUFFER;
         }
 
         rowsForCurrentSlide.push(row.cells.map((c: string) => ({ text: c, options: rowOptions })));
@@ -161,7 +161,13 @@ async function renderTable(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: any
     }
 
     if (rowsForCurrentSlide.length > 1) {
-        slide.addTable(rowsForCurrentSlide, { x: MARGIN_LEFT, y: startY, w: CONTENT_WIDTH, autoPage: false });
+        slide.addTable(rowsForCurrentSlide, { 
+            x: MARGIN_LEFT, 
+            y: startY, 
+            w: CONTENT_WIDTH, 
+            autoPage: false,
+            border: { type: 'solid', color: '888888', pt: 1 } // Add border to the table
+        });
     }
 
     const finalY = startY + tableHeightOnSlide + 0.25;
