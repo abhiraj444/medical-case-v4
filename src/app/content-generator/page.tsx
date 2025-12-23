@@ -16,10 +16,7 @@ import { Loader2, Wand2, Lightbulb, FileText, Bot, BrainCircuit, PlusCircle, Cop
 import { SlideEditor } from '@/components/SlideEditor';
 import type { Slide } from '@/components/SlideEditor';
 import { useAuth } from '@/hooks/useAuth';
-import { db, storage } from '@/lib/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { v4 as uuidv4 } from 'uuid';
-import { collection, serverTimestamp, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import type { StructuredQuestion } from '@/types';
 import { QuestionDisplay } from '@/components/QuestionDisplay';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -58,74 +55,6 @@ export default function ContentGeneratorPage() {
     }
   }, [user, authLoading, router]);
 
-   useEffect(() => {
-    const caseId = searchParams.get('caseId');
-    if (caseId && user && caseId !== currentCaseId) {
-      const loadCase = async () => {
-        setIsLoading(true);
-        try {
-          const caseRef = doc(db, 'cases', caseId);
-          const caseSnap = await getDoc(caseRef);
-          if (caseSnap.exists() && caseSnap.data().userId === user.uid) {
-            const caseData = caseSnap.data();
-            setMode(caseData.inputData.mode);
-            if (caseData.inputData.mode === 'question') {
-                setQuestion(caseData.inputData.question || '');
-            } else if (caseData.inputData.mode === 'topic') {
-                setTopic(caseData.inputData.topic || '');
-            }
-            setImageFiles([]);
-            if (caseData.inputData.structuredQuestion) {
-              setStructuredQuestion({
-                ...caseData.inputData.structuredQuestion,
-                images: caseData.inputData.images || [],
-              });
-            } else {
-              setStructuredQuestion(null);
-            }
-            setImagePreviews(caseData.inputData.images || []);
-
-            if (caseData.outputDataUrl) {
-              try {
-                const response = await fetch(caseData.outputDataUrl);
-                if (!response.ok) {
-                  throw new Error(`Failed to fetch output data: ${response.statusText}`);
-                }
-                const outputData = await response.json();
-                setResult(outputData.result || null);
-                setSlides(outputData.slides || null);
-                setPresentationOutline(outputData.outline || null);
-                setSuggestedTopics(outputData.suggestedTopics || []);
-                setUsedTopics(outputData.usedTopics || []);
-              } catch (e) {
-                console.error("Failed to parse output data from storage", e);
-                toast({ title: "Error", description: "Failed to load case results from storage.", variant: 'destructive' });
-                setResult(null);
-                setSlides(null);
-              }
-            } else {
-              // Handle older data structure for backward compatibility
-              setResult(caseData.outputData?.result);
-              setSlides(caseData.outputData?.slides);
-            }
-
-            setCurrentCaseId(caseId);
-            toast({ title: "Case Loaded", description: `Successfully loaded case: ${caseData.title}` });
-          } else {
-             toast({ title: "Error", description: "Could not find or access the specified case.", variant: 'destructive'});
-             router.push('/content-generator');
-          }
-        } catch (error) {
-            console.error("Failed to load case:", error);
-            toast({ title: "Error", description: "Failed to load the case from history.", variant: 'destructive'});
-            router.push('/content-generator');
-        } finally {
-            setIsLoading(false);
-        }
-      };
-      loadCase();
-    }
-  }, [searchParams, user, router, toast, currentCaseId]);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -181,14 +110,6 @@ export default function ContentGeneratorPage() {
     setStructuredQuestion(null);
 
     try {
-      const imageUrls = await Promise.all(
-        imageFiles.map(async (file) => {
-          const storageRef = ref(storage, `uploads/${user.uid}/${uuidv4()}-${file.name}`);
-          await uploadBytes(storageRef, file);
-          return getDownloadURL(storageRef);
-        })
-      );
-
       const images = await Promise.all(imageFiles.map(fileToDataUri));
       
       const [response, summaryResponse] = await Promise.all([
@@ -203,47 +124,11 @@ export default function ContentGeneratorPage() {
       ]);
 
       setResult(response);
-      const newStructuredQuestion = { summary: summaryResponse.summary, images: imageUrls };
+      const newStructuredQuestion = { summary: summaryResponse.summary, images: imagePreviews };
       setStructuredQuestion(newStructuredQuestion);
-
-      const outputData = {
-        result: response,
-        slides: null, // Slides are generated later
-      };
-
-      const caseId = currentCaseId || doc(collection(db, 'cases')).id;
-
-      const outputDataString = JSON.stringify(outputData);
-      const outputDataBlob = new Blob([outputDataString], { type: 'application/json' });
-      const storageRef = ref(storage, `outputs/${user.uid}/${caseId}.json`);
-      await uploadBytes(storageRef, outputDataBlob);
-      const outputDataUrl = await getDownloadURL(storageRef);
-
-      const caseData = {
-          userId: user.uid,
-          type: 'content-generator' as const,
-          title: response.topic,
-          createdAt: serverTimestamp(),
-          inputData: {
-              mode: 'question' as const,
-              question: question.trim() || null,
-              images: imageUrls.length > 0 ? imageUrls : null,
-              topic: null,
-              structuredQuestion: newStructuredQuestion,
-          },
-          outputDataUrl: outputDataUrl,
-      };
       
-      if (currentCaseId) {
-        const caseRef = doc(db, 'cases', currentCaseId);
-        await updateDoc(caseRef, caseData);
-        toast({ title: 'Case Updated', description: 'Your case has been updated in your history.' });
-      } else {
-        const caseRef = doc(db, 'cases', caseId);
-        await setDoc(caseRef, caseData);
-        setCurrentCaseId(caseId);
-        toast({ title: 'Case Saved', description: 'Your content generation case has been saved to your history.' });
-      }
+      setCurrentCaseId(uuidv4());
+      toast({ title: 'Case Created', description: 'Your content generation case has been created.' });
 
     } catch (error) {
       console.error('Clinical question failed:', error);
@@ -299,32 +184,8 @@ export default function ContentGeneratorPage() {
       };
       setResult(summaryResult);
 
-      const caseId = currentCaseId || doc(collection(db, 'cases')).id;
-      const caseData = {
-        userId: user.uid,
-        type: 'content-generator' as const,
-        title: topic,
-        createdAt: serverTimestamp(),
-        inputData: {
-          mode: 'topic' as const,
-          question: null,
-          images: null,
-          topic: topic.trim() || null,
-          structuredQuestion: null,
-        },
-        outputDataUrl: '', // This will be updated later
-      };
-
-      if (currentCaseId) {
-        const caseRef = doc(db, 'cases', currentCaseId);
-        await updateDoc(caseRef, caseData);
-        toast({ title: 'Case Updated', description: 'Your case has been updated in your history.' });
-      } else {
-        const caseRef = doc(db, 'cases', caseId);
-        await setDoc(caseRef, caseData);
-        setCurrentCaseId(caseId);
-        toast({ title: 'Case Saved', description: 'Your content generation case has been saved to your history.' });
-      }
+      setCurrentCaseId(uuidv4());
+      toast({ title: 'Case Created', description: 'Your content generation case has been created.' });
 
     } catch (error) {
       console.error('Topic submission failed:', error);
@@ -467,38 +328,6 @@ const handleGeneratePresentation = async () => {
       });
       const generatedSlides = await response.json();
       setSlides(generatedSlides);
-
-      const caseRef = doc(db, 'cases', currentCaseId);
-      const caseSnap = await getDoc(caseRef);
-      if (!caseSnap.exists()) {
-        toast({ title: "Error", description: "Case not found.", variant: "destructive" });
-        return;
-      }
-
-      const caseData = caseSnap.data();
-      let outputData: any = {};
-
-      // For topic mode on first generation, create the output data object.
-      // For question mode, or subsequent generations, fetch existing data.
-      if (caseData.outputDataUrl) {
-        const outputDataResponse = await fetch(caseData.outputDataUrl);
-        outputData = await outputDataResponse.json();
-      } else {
-        outputData = { result };
-      }
-
-      outputData.slides = generatedSlides;
-      outputData.outline = presentationOutline;
-
-      const outputDataString = JSON.stringify(outputData);
-      const outputDataBlob = new Blob([outputDataString], { type: 'application/json' });
-      const storageRef = ref(storage, `outputs/${user.uid}/${currentCaseId}.json`);
-      await uploadBytes(storageRef, outputDataBlob);
-      const newOutputDataUrl = await getDownloadURL(storageRef);
-
-      await updateDoc(caseRef, {
-        outputDataUrl: newOutputDataUrl,
-      });
 
       toast({ title: 'Presentation Generated', description: 'Your presentation has been added to the case.' });
     } catch (error) {
@@ -790,30 +619,6 @@ const handleGeneratePresentation = async () => {
                 onRefresh={handleGeneratePresentation}
                 onSlidesUpdate={async (updatedSlides) => {
                     setSlides(updatedSlides);
-                    if (currentCaseId && user) {
-                        try {
-                            const caseRef = doc(db, 'cases', currentCaseId);
-                            const caseSnap = await getDoc(caseRef);
-                            if (!caseSnap.exists()) return;
-
-                            const caseData = caseSnap.data();
-                            const response = await fetch(caseData.outputDataUrl);
-                            const outputData = await response.json();
-
-                            outputData.slides = updatedSlides;
-
-                            const outputDataString = JSON.stringify(outputData);
-                            const outputDataBlob = new Blob([outputDataString], { type: 'application/json' });
-                            const storageRef = ref(storage, `outputs/${user.uid}/${currentCaseId}.json`);
-                            await uploadBytes(storageRef, outputDataBlob);
-                            const newOutputDataUrl = await getDownloadURL(storageRef);
-
-                            await updateDoc(caseRef, { outputDataUrl: newOutputDataUrl });
-                        } catch (e) {
-                            console.error("Failed to update slides in storage", e);
-                            toast({ title: "Error", description: "Failed to save slide updates.", variant: 'destructive' });
-                        }
-                    }
                 }}
                 onNewCase={handleNewCase}
                 questionContext={mode === 'topic' ? topic : structuredQuestion?.summary || result?.topic || ''}
@@ -823,30 +628,6 @@ const handleGeneratePresentation = async () => {
                 onTopicsUpdate={async (newSuggested, newUsed) => {
                   setSuggestedTopics(newSuggested);
                   setUsedTopics(newUsed);
-                  if (currentCaseId && user) {
-                    try {
-                      const caseRef = doc(db, 'cases', currentCaseId);
-                      const caseSnap = await getDoc(caseRef);
-                      if (!caseSnap.exists()) return;
-
-                      const caseData = caseSnap.data();
-                      const response = await fetch(caseData.outputDataUrl);
-                      const outputData = await response.json();
-
-                      outputData.suggestedTopics = newSuggested;
-                      outputData.usedTopics = newUsed;
-
-                      const outputDataString = JSON.stringify(outputData);
-                      const outputDataBlob = new Blob([outputDataString], { type: 'application/json' });
-                      const storageRef = ref(storage, `outputs/${user.uid}/${currentCaseId}.json`);
-                      await uploadBytes(storageRef, outputDataBlob);
-                      const newOutputDataUrl = await getDownloadURL(storageRef);
-
-                      await updateDoc(caseRef, { outputDataUrl: newOutputDataUrl });
-                    } catch (e) {
-                      console.error("Failed to update topics in storage", e);
-                    }
-                  }
                 }}
             />
         )}
