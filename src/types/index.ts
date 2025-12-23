@@ -1,6 +1,5 @@
 'use client';
 
-import type { Timestamp } from 'firebase/firestore';
 import type { AiDiagnosisOutput } from '@/ai/flows/ai-diagnosis';
 import type { AnswerClinicalQuestionOutput } from '@/ai/flows/answer-clinical-question';
 
@@ -50,7 +49,7 @@ interface BaseCase {
     id: string;
     userId: string;
     title: string;
-    createdAt: Timestamp;
+    createdAt: Date;
 }
 
 export interface DiagnosisCase extends BaseCase {

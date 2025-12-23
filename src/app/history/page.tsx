@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/useAuth';
 import { type Case } from '@/types';
 import { HistoryCard } from '@/components/HistoryCard';
@@ -19,31 +17,10 @@ export default function HistoryPage() {
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
+    } else {
+      setLoading(false);
     }
   }, [user, authLoading, router]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    setLoading(true);
-    const casesRef = collection(db, 'cases');
-    const q = query(
-      casesRef,
-      where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const casesData: Case[] = [];
-      querySnapshot.forEach((doc) => {
-        casesData.push({ id: doc.id, ...doc.data() } as Case);
-      });
-      setCases(casesData);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
   
   if (authLoading || (!user)) {
     return (
@@ -74,15 +51,9 @@ export default function HistoryPage() {
                 </p>
               </CardContent>
             </Card>
-          ) : cases.length > 0 ? (
-            <div className="space-y-4">
-              {cases.map((caseItem) => (
-                <HistoryCard key={caseItem.id} caseItem={caseItem} />
-              ))}
-            </div>
           ) : (
             <p className="text-center text-muted-foreground">
-              You have no saved cases. Your work will appear here automatically.
+              History is not available in this version.
             </p>
           )}
         </CardContent>
